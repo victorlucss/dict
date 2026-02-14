@@ -12,7 +12,19 @@ class LLMProcessor {
             return
         }
 
-        guard let url = URL(string: settings.llmEndpoint) else {
+        let endpoint: String
+        switch settings.llmProvider {
+        case .openai:
+            endpoint = "https://api.openai.com/v1/chat/completions"
+        case .anthropic:
+            endpoint = "https://api.anthropic.com/v1/messages"
+        case .ollama:
+            endpoint = "http://localhost:11434/v1/chat/completions"
+        case .lmstudio:
+            endpoint = "http://localhost:1234/v1/chat/completions"
+        }
+
+        guard let url = URL(string: endpoint) else {
             completion(.failure(LLMError.invalidEndpoint))
             return
         }
@@ -25,7 +37,7 @@ class LLMProcessor {
         request.timeoutInterval = 15
 
         switch settings.llmProvider {
-        case .openai:
+        case .openai, .ollama, .lmstudio:
             request = buildOpenAIRequest(request, systemPrompt: systemPrompt, text: text, settings: settings)
         case .anthropic:
             request = buildAnthropicRequest(request, systemPrompt: systemPrompt, text: text, settings: settings)
@@ -43,9 +55,17 @@ class LLMProcessor {
                 return
             }
 
+            // Log error responses from the LLM server
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode >= 400 {
+                let body = String(data: data, encoding: .utf8) ?? "(unreadable)"
+                Log.error("LLM server returned \(httpResponse.statusCode): \(body)")
+                completion(.success(text))
+                return
+            }
+
             let content: String?
             switch settings.llmProvider {
-            case .openai:
+            case .openai, .ollama, .lmstudio:
                 content = self?.parseOpenAIResponse(data)
             case .anthropic:
                 content = self?.parseAnthropicResponse(data)
@@ -54,7 +74,8 @@ class LLMProcessor {
             if let content = content, !content.isEmpty {
                 completion(.success(content))
             } else {
-                Log.info("Unexpected LLM response format. Using raw transcription.")
+                let body = String(data: data, encoding: .utf8) ?? "(unreadable)"
+                Log.error("Unexpected LLM response: \(body)")
                 completion(.success(text))
             }
         }.resume()

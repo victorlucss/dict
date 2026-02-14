@@ -9,6 +9,7 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private var enginePopUp: NSPopUpButton!
     private var languagePopUp: NSPopUpButton!
     private var whisperModelField: NSTextField!
+    private var flowModeSwitch: NSSwitch!
     private var codeModeSwitch: NSSwitch!
     private var privacyModeSwitch: NSSwitch!
     private var verboseOverlaySwitch: NSSwitch!
@@ -24,7 +25,7 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
 
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 800),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 832),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -93,6 +94,17 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         browseButton.bezelStyle = .rounded
         contentView.addSubview(browseButton)
 
+        // Flow Mode
+        y -= rowHeight
+        addLabel("Flow Mode:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
+        flowModeSwitch = NSSwitch(frame: NSRect(x: controlX, y: y, width: 40, height: 24))
+        contentView.addSubview(flowModeSwitch)
+        let flowHint = NSTextField(labelWithString: "Auto-press Return after pasting")
+        flowHint.frame = NSRect(x: controlX + 52, y: y + 4, width: 250, height: 16)
+        flowHint.font = .systemFont(ofSize: 11)
+        flowHint.textColor = .secondaryLabelColor
+        contentView.addSubview(flowHint)
+
         // Code Mode
         y -= rowHeight
         addLabel("Code Mode:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
@@ -132,14 +144,16 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         y -= rowHeight
         addLabel("Provider:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
         providerPopUp = NSPopUpButton(frame: NSRect(x: controlX, y: y, width: controlWidth, height: 26))
-        providerPopUp.addItems(withTitles: ["OpenAI", "Anthropic"])
+        providerPopUp.addItems(withTitles: ["OpenAI", "Anthropic", "Ollama", "LM Studio"])
+        providerPopUp.target = self
+        providerPopUp.action = #selector(providerChanged)
         contentView.addSubview(providerPopUp)
 
         // Endpoint
         y -= rowHeight
         addLabel("Endpoint:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
         endpointField = NSTextField(frame: NSRect(x: controlX, y: y, width: controlWidth, height: 24))
-        endpointField.placeholderString = "http://localhost:11434/v1/chat/completions"
+        endpointField.placeholderString = "Ollama :11434 / LM Studio :1234 — must end with /v1/chat/completions"
         contentView.addSubview(endpointField)
 
         // Model
@@ -236,17 +250,56 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         }
 
         whisperModelField.stringValue = settings.whisperModelPath
+        flowModeSwitch.state = settings.flowMode ? .on : .off
         codeModeSwitch.state = settings.codeMode ? .on : .off
         privacyModeSwitch.state = settings.privacyMode ? .on : .off
         verboseOverlaySwitch.state = settings.verboseOverlay ? .on : .off
         overlayPositionPopUp.selectItem(at: settings.overlayPosition == .top ? 0 : 1)
 
         llmEnabledSwitch.state = settings.llmEnabled ? .on : .off
-        providerPopUp.selectItem(at: settings.llmProvider == .openai ? 0 : 1)
+        switch settings.llmProvider {
+        case .openai: providerPopUp.selectItem(at: 0)
+        case .anthropic: providerPopUp.selectItem(at: 1)
+        case .ollama: providerPopUp.selectItem(at: 2)
+        case .lmstudio: providerPopUp.selectItem(at: 3)
+        }
         endpointField.stringValue = settings.llmEndpoint
         modelField.stringValue = settings.llmModel
         apiKeyField.stringValue = settings.llmApiKey
         systemPromptView.string = settings.llmPrompt
+        updateFieldStates()
+    }
+
+    private func selectedProvider() -> Settings.LLMProvider {
+        switch providerPopUp.indexOfSelectedItem {
+        case 0: return .openai
+        case 1: return .anthropic
+        case 2: return .ollama
+        default: return .lmstudio
+        }
+    }
+
+    private func updateFieldStates() {
+        let provider = selectedProvider()
+        let isCloud = provider == .openai || provider == .anthropic
+        endpointField.isEnabled = false
+        apiKeyField.isEnabled = isCloud
+        switch provider {
+        case .openai:
+            endpointField.stringValue = ""
+            endpointField.placeholderString = "https://api.openai.com/v1/chat/completions"
+        case .anthropic:
+            endpointField.stringValue = ""
+            endpointField.placeholderString = "https://api.anthropic.com/v1/messages"
+        case .ollama:
+            endpointField.stringValue = ""
+            endpointField.placeholderString = "http://localhost:11434/v1/chat/completions"
+            apiKeyField.stringValue = ""
+        case .lmstudio:
+            endpointField.stringValue = ""
+            endpointField.placeholderString = "http://localhost:1234/v1/chat/completions"
+            apiKeyField.stringValue = ""
+        }
     }
 
     @objc private func saveClicked() {
@@ -256,12 +309,13 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             settings.whisperLanguage = code
         }
         settings.whisperModelPath = whisperModelField.stringValue
+        settings.flowMode = flowModeSwitch.state == .on
         settings.codeMode = codeModeSwitch.state == .on
         settings.privacyMode = privacyModeSwitch.state == .on
         settings.verboseOverlay = verboseOverlaySwitch.state == .on
         settings.overlayPosition = overlayPositionPopUp.indexOfSelectedItem == 0 ? .top : .bottom
         settings.llmEnabled = llmEnabledSwitch.state == .on
-        settings.llmProvider = providerPopUp.indexOfSelectedItem == 0 ? .openai : .anthropic
+        settings.llmProvider = selectedProvider()
         settings.llmEndpoint = endpointField.stringValue
         settings.llmModel = modelField.stringValue
         settings.llmApiKey = apiKeyField.stringValue
@@ -273,6 +327,10 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     }
 
     // MARK: - Actions
+
+    @objc private func providerChanged() {
+        updateFieldStates()
+    }
 
     @objc private func browseWhisperModel() {
         let panel = NSOpenPanel()

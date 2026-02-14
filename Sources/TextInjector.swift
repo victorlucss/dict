@@ -36,8 +36,21 @@ class TextInjector {
             simulateCmdV()
         }
 
+        // Flow mode: press Return after pasting to send the message
+        if Settings.shared.flowMode {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                let returnScript = NSAppleScript(source: """
+                    tell application "System Events"
+                        keystroke return
+                    end tell
+                    """)
+                var returnError: NSDictionary?
+                returnScript?.executeAndReturnError(&returnError)
+            }
+        }
+
         // Restore clipboard after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             pasteboard.clearContents()
             if let previous = previousContents {
                 pasteboard.setString(previous, forType: .string)
