@@ -7,50 +7,34 @@ class TextInjector {
     func type(_ text: String) {
         // Small delay to ensure the target app has focus after overlay dismissal
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.pasteViaAppleScript(text)
+            self.pasteText(text)
         }
     }
 
-    /// Uses AppleScript to perform Cmd+V — works reliably without
-    /// needing to manually post CGEvents (which can be swallowed).
-    private func pasteViaAppleScript(_ text: String) {
+    private func pasteText(_ text: String) {
         let pasteboard = NSPasteboard.general
         let previousContents = pasteboard.string(forType: .string)
+        let flowMode = Settings.shared.flowMode
 
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        // Use AppleScript to keystroke Cmd+V into the frontmost app
-        let script = NSAppleScript(source: """
-            tell application "System Events"
-                keystroke "v" using command down
-            end tell
-            """)
-        var error: NSDictionary?
-        script?.executeAndReturnError(&error)
+        Log.info("Pasting text (flow mode: \(flowMode))")
 
-        if let error = error {
-            Log.info("AppleScript paste failed: \(error). Trying CGEvent fallback.")
-            // Small delay before CGEvent to ensure frontmost app is ready
-            usleep(50_000)
-            simulateCmdV()
-        }
+        // Use CGEvent for Cmd+V (primary — doesn't require Automation permission)
+        simulateCmdV()
 
         // Flow mode: press Return after pasting to send the message
-        if Settings.shared.flowMode {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                let returnScript = NSAppleScript(source: """
-                    tell application "System Events"
-                        keystroke return
-                    end tell
-                    """)
-                var returnError: NSDictionary?
-                returnScript?.executeAndReturnError(&returnError)
+        if flowMode {
+            DispatchQueue.global(qos: .userInteractive).async {
+                Thread.sleep(forTimeInterval: 0.3)
+                self.simulateReturn()
             }
         }
 
         // Restore clipboard after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        let restoreDelay: TimeInterval = flowMode ? 1.0 : 0.5
+        DispatchQueue.main.asyncAfter(deadline: .now() + restoreDelay) {
             pasteboard.clearContents()
             if let previous = previousContents {
                 pasteboard.setString(previous, forType: .string)
@@ -58,7 +42,7 @@ class TextInjector {
         }
     }
 
-    /// CGEvent fallback for Cmd+V
+    /// Simulate Cmd+V via CGEvent
     private func simulateCmdV() {
         let source = CGEventSource(stateID: .combinedSessionState)
 
@@ -71,6 +55,25 @@ class TextInjector {
 
         keyDown.post(tap: .cgSessionEventTap)
         keyUp.post(tap: .cgSessionEventTap)
+    }
+
+    /// Simulate Return key press via CGEvent
+    private func simulateReturn() {
+        let source = CGEventSource(stateID: .privateState)
+
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 36, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 36, keyDown: false)
+        else {
+            Log.info("Flow mode: failed to create CGEvent for Return")
+            return
+        }
+
+        keyDown.flags = []
+        keyUp.flags = []
+
+        keyDown.post(tap: .cgSessionEventTap)
+        keyUp.post(tap: .cgSessionEventTap)
+        Log.info("Flow mode: Return sent")
     }
 
     /// Check Accessibility permission status (no prompt).
