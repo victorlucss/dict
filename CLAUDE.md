@@ -15,11 +15,26 @@ swift build
 # Release build + .app bundle
 ./scripts/build.sh
 
+# Release build + .app bundle + DMG
+./scripts/build.sh --dmg
+
 # Run the app
 open Dict.app
 ```
 
 There are no tests or linter configured yet. The project uses Swift Package Manager with no external dependencies — only macOS system frameworks (AppKit, Carbon, AVFoundation, Speech).
+
+## Releasing
+
+Versioning follows semver. The version lives in `Resources/Info.plist` (`CFBundleShortVersionString` and `CFBundleVersion`).
+
+To release a new version:
+1. Bump the version in `Resources/Info.plist` (both `CFBundleShortVersionString` and `CFBundleVersion`)
+2. Commit and push to `main`
+3. The GitHub Actions pipeline (`.github/workflows/release.yml`) automatically:
+   - Builds the DMG on a macOS 14 runner
+   - Creates a GitHub Release tagged `vX.Y.Z` with the DMG attached
+   - Skips if a tag for that version already exists
 
 ## Architecture
 
@@ -35,6 +50,7 @@ HotkeyManager (Option+Space, Carbon API)
 
 RecordingOverlay (floating HUD with audio level bars, shown while recording)
 Settings (singleton, persisted to ~/.config/dict/config.json)
+PreferencesWindow (buffered UI — changes only apply on Save)
 ```
 
 **Key design decisions:**
@@ -43,6 +59,15 @@ Settings (singleton, persisted to ~/.config/dict/config.json)
 - Text injection uses AppleScript `System Events` keystroke as primary method, CGEvent as fallback — both require Accessibility permission
 - `LSUIElement = true` in Info.plist — menu bar only, no dock icon
 - Config lives at `~/.config/dict/config.json`, auto-created with defaults on first access
+- Settings uses a custom `init(from:)` decoder so missing keys fall back to defaults — adding new settings won't break existing config files
+- Preferences window buffers all changes until the user clicks Save (no live-apply)
+- Push-to-talk mode guards against Carbon key-repeat events to avoid recreating the NSEvent monitor mid-hold
+
+## Supported Languages
+
+Currently English and Brazilian Portuguese only. The language setting affects both Apple Speech (locale) and Whisper (`-l` flag). To add a new language:
+1. Add an entry to `Settings.supportedLanguages`
+2. Add a case in `SpeechRecognizerManager.localeIdentifier(for:)` to map the code to an Apple locale (e.g. `"pt"` → `"pt-BR"`)
 
 ## Runtime Requirements
 

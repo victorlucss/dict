@@ -38,6 +38,19 @@ if [[ "${1:-}" == "--dmg" ]]; then
     # Create Applications symlink for drag-to-install
     ln -s /Applications "$DMG_TMP/Applications"
 
+    # Add instructions for unsigned app
+    cat > "$DMG_TMP/READ ME FIRST.txt" <<'README'
+Dict is not code-signed yet, so macOS may block it after download.
+
+After dragging Dict to Applications, open Terminal and run:
+
+    xattr -cr /Applications/Dict.app
+
+Then open Dict normally. You only need to do this once.
+
+Alternatively, right-click Dict.app → Open → click "Open" in the dialog.
+README
+
     hdiutil create -volname "$APP_NAME" \
         -srcfolder "$DMG_TMP" \
         -ov -format UDZO \
