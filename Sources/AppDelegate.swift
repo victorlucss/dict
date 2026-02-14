@@ -19,6 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.clear()
+        setupMainMenu()
         setupStatusBar()
         setupHotkey()
         setupSTTCallbacks()
@@ -41,6 +42,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("Dict is running. Press Option+Space to dictate.")
         Log.info("STT engine: \(settings.sttEngine.rawValue)")
         Log.info("LLM cleanup: \(settings.llmEnabled ? "on" : "off")")
+    }
+
+    // MARK: - Main Menu (enables Cmd+C/V/X/A in text fields)
+
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+
+        let editMenuItem = NSMenuItem()
+        editMenuItem.title = "Edit"
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenuItem.submenu = editMenu
+        mainMenu.addItem(editMenuItem)
+
+        NSApp.mainMenu = mainMenu
     }
 
     // MARK: - Status Bar
@@ -163,6 +187,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         appleSpeech.onError = { [weak self] error in
             Log.error("Apple Speech error: \(error)")
+            self?.overlay.hide()
             self?.stopRecording()
         }
         appleSpeech.onAudioLevel = { [weak self] level in
@@ -174,6 +199,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         whisperSTT.onError = { [weak self] error in
             Log.error("Whisper error: \(error)")
+            self?.overlay.hide()
             self?.stopRecording()
         }
         whisperSTT.onAudioLevel = { [weak self] level in
@@ -215,7 +241,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 systemSymbolName: "mic",
                 accessibilityDescription: "Dict"
             )
-            self.overlay.hide()
+            self.overlay.showProcessing()
         }
 
         switch settings.sttEngine {
@@ -227,7 +253,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleTranscription(_ text: String) {
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty else {
+            Log.info("Empty transcription, skipping.")
+            DispatchQueue.main.async { self.overlay.hide() }
+            return
+        }
 
         let sttMs = Int((CFAbsoluteTimeGetCurrent() - recordingStoppedAt) * 1000)
         Log.info("Transcribed (\(sttMs)ms): \(text)")
@@ -235,6 +265,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Check for snippet match before LLM processing
         if let expansion = Snippets.shared.match(text) {
             Log.info("Snippet matched: \"\(text)\" → expanding")
+            DispatchQueue.main.async { self.overlay.hide() }
             textInjector.type(expansion)
             Log.info("[Perf] Total: \(sttMs)ms (snippet)")
             return
@@ -246,11 +277,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let llmStart = CFAbsoluteTimeGetCurrent()
         let engine = settings.sttEngine.rawValue
+
         llmProcessor.process(text, frontmostApp: frontmostApp) { [weak self] result in
             let llmMs = Int((CFAbsoluteTimeGetCurrent() - llmStart) * 1000)
             let totalMs = Int((CFAbsoluteTimeGetCurrent() - (self?.recordingStoppedAt ?? llmStart)) * 1000)
 
             DispatchQueue.main.async {
+                self?.overlay.hide()
                 switch result {
                 case .success(let cleaned):
                     Log.info("Final text: \(cleaned)")

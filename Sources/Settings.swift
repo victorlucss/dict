@@ -31,6 +31,8 @@ class Settings {
     enum LLMProvider: String, Codable {
         case openai
         case anthropic
+        case ollama
+        case lmstudio
     }
 
     struct SettingsData: Codable {
@@ -42,13 +44,14 @@ class Settings {
         var llmEndpoint: String = "http://localhost:11434/v1/chat/completions"
         var llmModel: String = "llama3.2"
         var llmApiKey: String = ""
-        var llmProvider: LLMProvider = .openai
+        var llmProvider: LLMProvider = .ollama
         var llmPrompt: String = """
             Clean up the following voice transcription. \
             Remove filler words (um, uh, like, you know), \
             fix grammar and punctuation, and make it read naturally. \
             Output ONLY the cleaned text, nothing else.
             """
+        var flowMode: Bool = false
         var codeMode: Bool = false
         var privacyMode: Bool = false
         var verboseOverlay: Bool = false
@@ -70,6 +73,7 @@ class Settings {
             llmApiKey = (try? c.decode(String.self, forKey: .llmApiKey)) ?? defaults.llmApiKey
             llmProvider = (try? c.decode(LLMProvider.self, forKey: .llmProvider)) ?? defaults.llmProvider
             llmPrompt = (try? c.decode(String.self, forKey: .llmPrompt)) ?? defaults.llmPrompt
+            flowMode = (try? c.decode(Bool.self, forKey: .flowMode)) ?? defaults.flowMode
             codeMode = (try? c.decode(Bool.self, forKey: .codeMode)) ?? defaults.codeMode
             privacyMode = (try? c.decode(Bool.self, forKey: .privacyMode)) ?? defaults.privacyMode
             verboseOverlay = (try? c.decode(Bool.self, forKey: .verboseOverlay)) ?? defaults.verboseOverlay
@@ -136,6 +140,11 @@ class Settings {
     var llmProvider: LLMProvider {
         get { data.llmProvider }
         set { data.llmProvider = newValue; save() }
+    }
+
+    var flowMode: Bool {
+        get { data.flowMode }
+        set { data.flowMode = newValue; save() }
     }
 
     var codeMode: Bool {

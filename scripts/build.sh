@@ -22,6 +22,14 @@ cp "$BUILD_DIR/release/Dict" "$APP_BUNDLE/Contents/MacOS/Dict"
 cp "$PROJECT_DIR/Resources/Info.plist" "$APP_BUNDLE/Contents/"
 cp "$PROJECT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 
+# Code-sign so macOS preserves permissions across updates
+SIGN_IDENTITY="${CODESIGN_IDENTITY:-Apple Development}"
+if codesign --force --sign "$SIGN_IDENTITY" --deep "$APP_BUNDLE" 2>/dev/null; then
+    echo "Signed with: $SIGN_IDENTITY"
+else
+    echo "Warning: Code signing failed. Accessibility permissions will reset on each install."
+fi
+
 echo "App bundle created at: $APP_BUNDLE"
 
 # Build DMG if --dmg flag is passed

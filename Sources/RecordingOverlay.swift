@@ -1,19 +1,17 @@
 import AppKit
 import AVFoundation
 
-/// A small floating overlay window that appears when recording.
-/// Shows a pulsing mic icon, audio level bars, and streaming transcription text.
+/// A minimal floating pill overlay that appears when recording.
+/// Shows dot-style audio level indicators, no mic icon.
 class RecordingOverlay {
     private var window: NSPanel?
-    private var levelView: AudioLevelView?
+    private var levelView: DotLevelView?
     private var textField: NSTextField?
-    private var timer: Timer?
-    private var micIcon: NSImageView?
 
     private var verbose: Bool { Settings.shared.verboseOverlay }
 
-    private var currentWidth: CGFloat { verbose ? 340 : 140 }
-    private var currentHeight: CGFloat { verbose ? 60 : 36 }
+    private var currentWidth: CGFloat { verbose ? 200 : 100 }
+    private var currentHeight: CGFloat { verbose ? 44 : 28 }
 
     func show() {
         guard window == nil else { return }
@@ -48,46 +46,26 @@ class RecordingOverlay {
         panel.isMovableByWindowBackground = true
 
         let container = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
-
-        let background = NSVisualEffectView(frame: container.bounds)
-        background.material = .hudWindow
-        background.state = .active
-        background.wantsLayer = true
-        background.layer?.cornerRadius = verbose ? 12 : 18
-        background.layer?.masksToBounds = true
-        container.addSubview(background)
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
+        container.layer?.cornerRadius = h / 2
 
         if verbose {
-            // Mic icon
-            let mic = NSImageView(frame: NSRect(x: 12, y: 20, width: 24, height: 24))
-            mic.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Recording")
-            mic.contentTintColor = .systemRed
-            container.addSubview(mic)
-            self.micIcon = mic
-
-            // Audio level bars
-            let level = AudioLevelView(frame: NSRect(x: 44, y: 20, width: 84, height: 24))
+            let level = DotLevelView(frame: NSRect(x: 12, y: 16, width: w - 24, height: 16))
             container.addSubview(level)
             self.levelView = level
 
-            // Streaming text label
             let text = NSTextField(labelWithString: "Listening...")
-            text.frame = NSRect(x: 12, y: 4, width: w - 24, height: 16)
-            text.font = .systemFont(ofSize: 11, weight: .medium)
-            text.textColor = .secondaryLabelColor
+            text.frame = NSRect(x: 12, y: 2, width: w - 24, height: 12)
+            text.font = .systemFont(ofSize: 9, weight: .medium)
+            text.textColor = NSColor.white.withAlphaComponent(0.5)
+            text.alignment = .center
             text.lineBreakMode = .byTruncatingTail
             text.maximumNumberOfLines = 1
             container.addSubview(text)
             self.textField = text
         } else {
-            // Minimal: mic icon + level bars, vertically centered
-            let mic = NSImageView(frame: NSRect(x: 12, y: 6, width: 20, height: 20))
-            mic.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Recording")
-            mic.contentTintColor = .systemRed
-            container.addSubview(mic)
-            self.micIcon = mic
-
-            let level = AudioLevelView(frame: NSRect(x: 40, y: 6, width: 84, height: 20))
+            let level = DotLevelView(frame: NSRect(x: 12, y: 6, width: w - 24, height: 16))
             container.addSubview(level)
             self.levelView = level
         }
@@ -95,18 +73,13 @@ class RecordingOverlay {
         panel.contentView = container
         panel.orderFrontRegardless()
         window = panel
-
-        startPulse(micIcon!)
     }
 
     func hide() {
-        timer?.invalidate()
-        timer = nil
         window?.orderOut(nil)
         window = nil
         levelView = nil
         textField = nil
-        micIcon = nil
     }
 
     func updateLevel(_ level: Float) {
@@ -122,59 +95,82 @@ class RecordingOverlay {
 
     func showProcessing() {
         DispatchQueue.main.async {
+            if self.window == nil {
+                self.show()
+            }
+            self.levelView?.isProcessing = true
             if self.verbose {
                 self.textField?.stringValue = "Processing..."
             }
-            self.micIcon?.image = NSImage(systemSymbolName: "brain", accessibilityDescription: "Processing")
-            self.micIcon?.contentTintColor = .systemBlue
-        }
-    }
-
-    private func startPulse(_ view: NSView) {
-        var growing = false
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
-            let current = view.alphaValue
-            if current <= 0.4 { growing = true }
-            if current >= 1.0 { growing = false }
-            view.alphaValue = growing ? current + 0.03 : current - 0.03
         }
     }
 }
 
-/// Draws audio level as animated bars.
-class AudioLevelView: NSView {
+/// Draws audio level as a row of dots that grow/shrink with volume.
+class DotLevelView: NSView {
     var level: Float = 0 {
         didSet { needsDisplay = true }
     }
 
-    private let barCount = 12
-    private let barSpacing: CGFloat = 2
-    private let barWidth: CGFloat = 4
-    private let cornerRadius: CGFloat = 1.5
+    var isProcessing = false {
+        didSet {
+            if isProcessing { startProcessingAnimation() }
+            else { stopProcessingAnimation() }
+        }
+    }
+
+    private let dotCount = 10
+    private let dotSpacing: CGFloat = 1.5
+    private let minRadius: CGFloat = 2
+    private let maxRadius: CGFloat = 3.5
+    private var processingTimer: Timer?
+    private var processingPhase: CGFloat = 0
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        let totalWidth = CGFloat(barCount) * (barWidth + barSpacing) - barSpacing
+        let totalWidth = CGFloat(dotCount) * (maxRadius * 2 + dotSpacing) - dotSpacing
         let startX = (bounds.width - totalWidth) / 2
 
-        for i in 0..<barCount {
-            let x = startX + CGFloat(i) * (barWidth + barSpacing)
+        for i in 0..<dotCount {
+            let centerX = startX + CGFloat(i) * (maxRadius * 2 + dotSpacing) + maxRadius
+            let centerY = bounds.midY
 
-            let normalizedLevel = CGFloat(max(0, min(1, level)))
-            let distance = abs(CGFloat(i) - CGFloat(barCount) / 2) / CGFloat(barCount / 2)
-            let barLevel = normalizedLevel * (1.0 - distance * 0.5)
-            let minHeight: CGFloat = 3
-            let maxHeight: CGFloat = bounds.height - 2
-            let barHeight = minHeight + barLevel * (maxHeight - minHeight)
+            let radius: CGFloat
+            let alpha: CGFloat
 
-            let y = (bounds.height - barHeight) / 2
-            let rect = NSRect(x: x, y: y, width: barWidth, height: barHeight)
-            let path = NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius)
+            if isProcessing {
+                let wave = (sin(processingPhase + CGFloat(i) * 0.5) + 1) / 2
+                radius = minRadius + wave * (maxRadius - minRadius)
+                alpha = 0.4 + wave * 0.6
+            } else {
+                let normalizedLevel = CGFloat(max(0, min(1, level)))
+                let center = CGFloat(dotCount) / 2
+                let distance = abs(CGFloat(i) - center) / center
+                let dotLevel = normalizedLevel * (1.0 - distance * 0.6)
+                radius = minRadius + dotLevel * (maxRadius - minRadius)
+                alpha = 0.3 + dotLevel * 0.7
+            }
 
-            let alpha = 0.5 + normalizedLevel * 0.5
-            NSColor.systemRed.withAlphaComponent(alpha).setFill()
+            let rect = NSRect(x: centerX - radius, y: centerY - radius, width: radius * 2, height: radius * 2)
+            let path = NSBezierPath(ovalIn: rect)
+            NSColor.white.withAlphaComponent(alpha).setFill()
             path.fill()
         }
+    }
+
+    private func startProcessingAnimation() {
+        stopProcessingAnimation()
+        processingTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.processingPhase += 0.15
+            self.needsDisplay = true
+        }
+    }
+
+    private func stopProcessingAnimation() {
+        processingTimer?.invalidate()
+        processingTimer = nil
+        processingPhase = 0
     }
 }
