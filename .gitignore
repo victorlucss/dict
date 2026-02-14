@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+Dict.app/
+Dict.dmg
+*.xcodeproj
+xcuserdata/
+DerivedData/
+.DS_Store
+.dmg-staging/
