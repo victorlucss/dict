@@ -89,11 +89,13 @@ class LLMProcessor {
             req.setValue("Bearer \(settings.llmApiKey)", forHTTPHeaderField: "Authorization")
         }
 
+        let wrappedText = "[TRANSCRIPTION TO CLEAN]: \(text)"
+
         let body: [String: Any] = [
             "model": settings.llmModel,
             "messages": [
                 ["role": "system", "content": systemPrompt],
-                ["role": "user", "content": text],
+                ["role": "user", "content": wrappedText],
             ],
             "temperature": 0.3,
             "max_tokens": 2048,
@@ -121,11 +123,13 @@ class LLMProcessor {
         }
         req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
 
+        let wrappedText = "[TRANSCRIPTION TO CLEAN]: \(text)"
+
         let body: [String: Any] = [
             "model": settings.llmModel,
             "system": systemPrompt,
             "messages": [
-                ["role": "user", "content": text],
+                ["role": "user", "content": wrappedText],
             ],
             "temperature": 0.3,
             "max_tokens": 2048,

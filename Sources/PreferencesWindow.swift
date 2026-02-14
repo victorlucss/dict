@@ -4,28 +4,54 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private let settings = Settings.shared
     var onSave: (() -> Void)?
 
+    // Sidebar
+    private var sidebarButtons: [NSButton] = []
+    private var currentSection = 0
+    private var contentContainer: NSView!
+    private var sectionTitleLabel: NSTextField!
+
     // General controls
     private var hotkeyModePopUp: NSPopUpButton!
-    private var enginePopUp: NSPopUpButton!
     private var languagePopUp: NSPopUpButton!
-    private var whisperModelField: NSTextField!
     private var flowModeSwitch: NSSwitch!
     private var codeModeSwitch: NSSwitch!
     private var privacyModeSwitch: NSSwitch!
-    private var verboseOverlaySwitch: NSSwitch!
-    private var overlayPositionPopUp: NSPopUpButton!
+
+    // Speech controls
+    private var enginePopUp: NSPopUpButton!
+    private var whisperModelField: NSTextField!
+    private var whisperBrowseButton: NSButton!
+    private var whisperModelLabel: NSTextField!
 
     // LLM controls
     private var llmEnabledSwitch: NSSwitch!
     private var providerPopUp: NSPopUpButton!
     private var endpointField: NSTextField!
+    private var endpointLabel: NSTextField!
     private var modelField: NSTextField!
     private var apiKeyField: NSSecureTextField!
+    private var apiKeyLabel: NSTextField!
     private var systemPromptView: NSTextView!
+
+    // Overlay controls
+    private var verboseOverlaySwitch: NSSwitch!
+    private var overlayPositionPopUp: NSPopUpButton!
+
+    // Section views
+    private var sectionViews: [NSView] = []
+
+    private let sidebarWidth: CGFloat = 160
+    private let sections: [(title: String, icon: String)] = [
+        ("General", "gearshape"),
+        ("Speech", "waveform"),
+        ("LLM", "brain"),
+        ("Overlay", "rectangle.inset.filled"),
+        ("Files", "folder"),
+    ]
 
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 832),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 480),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -39,6 +65,7 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
 
     func show() {
         loadValues()
+        selectSection(0)
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -46,213 +73,419 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     // MARK: - UI Construction
 
     private func buildUI() {
-        let contentView = NSView(frame: contentRect(forFrameRect: frame))
-        self.contentView = contentView
+        let root = NSView()
+        root.wantsLayer = true
+        self.contentView = root
 
-        var y = contentView.bounds.height - 40
-        let labelX: CGFloat = 20
-        let controlX: CGFloat = 170
-        let controlWidth: CGFloat = 310
-        let rowHeight: CGFloat = 32
+        // Sidebar
+        let sidebar = NSView()
+        sidebar.wantsLayer = true
+        sidebar.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        sidebar.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(sidebar)
 
-        // --- General Section ---
-        y = addSectionHeader("General", at: y, in: contentView)
+        let sidebarStack = NSStackView()
+        sidebarStack.orientation = .vertical
+        sidebarStack.alignment = .leading
+        sidebarStack.spacing = 2
+        sidebarStack.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(sidebarStack)
 
-        // Hotkey Mode
-        y -= rowHeight
-        addLabel("Hotkey Mode:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        hotkeyModePopUp = NSPopUpButton(frame: NSRect(x: controlX, y: y, width: controlWidth, height: 26))
+        for (i, section) in sections.enumerated() {
+            let button = createSidebarButton(title: section.title, icon: section.icon, tag: i)
+            sidebarButtons.append(button)
+            sidebarStack.addArrangedSubview(button)
+            button.widthAnchor.constraint(equalToConstant: sidebarWidth - 16).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        }
+
+        // Separator line between sidebar and content
+        let divider = NSBox()
+        divider.boxType = .separator
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(divider)
+
+        // Content pane
+        let contentPane = NSView()
+        contentPane.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(contentPane)
+
+        // Section title
+        sectionTitleLabel = NSTextField(labelWithString: "General")
+        sectionTitleLabel.font = .systemFont(ofSize: 18, weight: .bold)
+        sectionTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentPane.addSubview(sectionTitleLabel)
+
+        // Content container (swapped per section)
+        contentContainer = NSView()
+        contentContainer.translatesAutoresizingMaskIntoConstraints = false
+        contentPane.addSubview(contentContainer)
+
+        // Save button
+        let saveButton = NSButton(title: "Save", target: self, action: #selector(saveClicked))
+        saveButton.bezelStyle = .rounded
+        saveButton.keyEquivalent = "\r"
+        saveButton.translatesAutoresizingMaskIntoConstraints = false
+        contentPane.addSubview(saveButton)
+
+        // Layout
+        NSLayoutConstraint.activate([
+            sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            sidebar.topAnchor.constraint(equalTo: root.topAnchor),
+            sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            sidebar.widthAnchor.constraint(equalToConstant: sidebarWidth),
+
+            sidebarStack.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 12),
+            sidebarStack.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 8),
+            sidebarStack.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -8),
+
+            divider.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
+            divider.topAnchor.constraint(equalTo: root.topAnchor),
+            divider.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            divider.widthAnchor.constraint(equalToConstant: 1),
+
+            contentPane.leadingAnchor.constraint(equalTo: divider.trailingAnchor),
+            contentPane.topAnchor.constraint(equalTo: root.topAnchor),
+            contentPane.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            contentPane.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+
+            sectionTitleLabel.topAnchor.constraint(equalTo: contentPane.topAnchor, constant: 20),
+            sectionTitleLabel.leadingAnchor.constraint(equalTo: contentPane.leadingAnchor, constant: 24),
+
+            contentContainer.topAnchor.constraint(equalTo: sectionTitleLabel.bottomAnchor, constant: 16),
+            contentContainer.leadingAnchor.constraint(equalTo: contentPane.leadingAnchor, constant: 24),
+            contentContainer.trailingAnchor.constraint(equalTo: contentPane.trailingAnchor, constant: -24),
+            contentContainer.bottomAnchor.constraint(equalTo: saveButton.topAnchor, constant: -16),
+
+            saveButton.trailingAnchor.constraint(equalTo: contentPane.trailingAnchor, constant: -24),
+            saveButton.bottomAnchor.constraint(equalTo: contentPane.bottomAnchor, constant: -16),
+            saveButton.widthAnchor.constraint(equalToConstant: 80),
+        ])
+
+        // Build section content views
+        sectionViews = [
+            buildGeneralSection(),
+            buildSpeechSection(),
+            buildLLMSection(),
+            buildOverlaySection(),
+            buildFilesSection(),
+        ]
+
+        selectSection(0)
+    }
+
+    // MARK: - Sidebar
+
+    private func createSidebarButton(title: String, icon: String, tag: Int) -> NSButton {
+        let button = NSButton()
+        button.tag = tag
+        button.target = self
+        button.action = #selector(sidebarClicked(_:))
+        button.bezelStyle = .recessed
+        button.isBordered = false
+        button.imagePosition = .imageLeading
+        button.alignment = .left
+        button.font = .systemFont(ofSize: 13)
+        button.image = NSImage(systemSymbolName: icon, accessibilityDescription: title)
+        button.title = " \(title)"
+        button.contentTintColor = .labelColor
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 6
+        return button
+    }
+
+    @objc private func sidebarClicked(_ sender: NSButton) {
+        selectSection(sender.tag)
+    }
+
+    private func selectSection(_ index: Int) {
+        currentSection = index
+
+        // Update sidebar highlight
+        for (i, button) in sidebarButtons.enumerated() {
+            if i == index {
+                button.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
+                button.contentTintColor = .controlAccentColor
+            } else {
+                button.layer?.backgroundColor = nil
+                button.contentTintColor = .labelColor
+            }
+        }
+
+        // Update title
+        sectionTitleLabel.stringValue = sections[index].title
+
+        // Swap content
+        contentContainer.subviews.forEach { $0.removeFromSuperview() }
+        let sectionView = sectionViews[index]
+        sectionView.translatesAutoresizingMaskIntoConstraints = false
+        contentContainer.addSubview(sectionView)
+        NSLayoutConstraint.activate([
+            sectionView.topAnchor.constraint(equalTo: contentContainer.topAnchor),
+            sectionView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
+            sectionView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
+        ])
+    }
+
+    // MARK: - Section Builders
+
+    private func buildGeneralSection() -> NSView {
+        let card = createCard()
+        let stack = cardStack()
+
+        hotkeyModePopUp = NSPopUpButton()
         hotkeyModePopUp.addItems(withTitles: ["Toggle (press to start/stop)", "Push to Talk (hold to record)"])
-        contentView.addSubview(hotkeyModePopUp)
+        stack.addArrangedSubview(settingRow(label: "Hotkey Mode", control: hotkeyModePopUp))
 
-        // STT Engine
-        y -= rowHeight
-        addLabel("STT Engine:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        enginePopUp = NSPopUpButton(frame: NSRect(x: controlX, y: y, width: controlWidth, height: 26))
-        enginePopUp.addItems(withTitles: ["Apple Speech", "Whisper"])
-        contentView.addSubview(enginePopUp)
-
-        // Language
-        y -= rowHeight
-        addLabel("Language:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        languagePopUp = NSPopUpButton(frame: NSRect(x: controlX, y: y, width: controlWidth, height: 26))
+        languagePopUp = NSPopUpButton()
         for lang in Settings.supportedLanguages {
             languagePopUp.addItem(withTitle: lang.name)
             languagePopUp.lastItem?.representedObject = lang.code
         }
-        contentView.addSubview(languagePopUp)
+        stack.addArrangedSubview(settingRow(label: "Language", control: languagePopUp))
 
-        // Whisper Model Path
-        y -= rowHeight
-        addLabel("Whisper Model:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        whisperModelField = NSTextField(frame: NSRect(x: controlX, y: y, width: controlWidth - 80, height: 24))
+        flowModeSwitch = NSSwitch()
+        let flowRow = settingRow(label: "Flow Mode", control: flowModeSwitch,
+                                  hint: "Auto-press Return after pasting")
+        stack.addArrangedSubview(flowRow)
+
+        codeModeSwitch = NSSwitch()
+        stack.addArrangedSubview(settingRow(label: "Code Mode", control: codeModeSwitch))
+
+        privacyModeSwitch = NSSwitch()
+        stack.addArrangedSubview(settingRow(label: "Privacy Mode", control: privacyModeSwitch))
+
+        card.addSubview(stack)
+        pinInside(stack, to: card, padding: 16)
+        return card
+    }
+
+    private func buildSpeechSection() -> NSView {
+        let card = createCard()
+        let stack = cardStack()
+
+        enginePopUp = NSPopUpButton()
+        enginePopUp.addItems(withTitles: ["Apple Speech", "Whisper"])
+        enginePopUp.target = self
+        enginePopUp.action = #selector(engineChanged)
+        stack.addArrangedSubview(settingRow(label: "STT Engine", control: enginePopUp))
+
+        whisperModelField = NSTextField()
         whisperModelField.placeholderString = "/path/to/ggml-model.bin"
-        contentView.addSubview(whisperModelField)
+        whisperBrowseButton = NSButton(title: "Browse...", target: self, action: #selector(browseWhisperModel))
+        whisperBrowseButton.bezelStyle = .rounded
 
-        let browseButton = NSButton(title: "Browse...", target: self, action: #selector(browseWhisperModel))
-        browseButton.frame = NSRect(x: controlX + controlWidth - 74, y: y, width: 80, height: 24)
-        browseButton.bezelStyle = .rounded
-        contentView.addSubview(browseButton)
+        let modelRow = NSStackView()
+        modelRow.orientation = .horizontal
+        modelRow.spacing = 8
+        whisperModelField.translatesAutoresizingMaskIntoConstraints = false
+        modelRow.addArrangedSubview(whisperModelField)
+        modelRow.addArrangedSubview(whisperBrowseButton)
+        whisperModelField.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        // Flow Mode
-        y -= rowHeight
-        addLabel("Flow Mode:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        flowModeSwitch = NSSwitch(frame: NSRect(x: controlX, y: y, width: 40, height: 24))
-        contentView.addSubview(flowModeSwitch)
-        let flowHint = NSTextField(labelWithString: "Auto-press Return after pasting")
-        flowHint.frame = NSRect(x: controlX + 52, y: y + 4, width: 250, height: 16)
-        flowHint.font = .systemFont(ofSize: 11)
-        flowHint.textColor = .secondaryLabelColor
-        contentView.addSubview(flowHint)
+        whisperModelLabel = NSTextField(labelWithString: "Whisper Model")
+        let whisperRow = settingRow(labelView: whisperModelLabel, control: modelRow)
+        stack.addArrangedSubview(whisperRow)
 
-        // Code Mode
-        y -= rowHeight
-        addLabel("Code Mode:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        codeModeSwitch = NSSwitch(frame: NSRect(x: controlX, y: y, width: 40, height: 24))
-        contentView.addSubview(codeModeSwitch)
+        card.addSubview(stack)
+        pinInside(stack, to: card, padding: 16)
+        return card
+    }
 
-        // Privacy Mode
-        y -= rowHeight
-        addLabel("Privacy Mode:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        privacyModeSwitch = NSSwitch(frame: NSRect(x: controlX, y: y, width: 40, height: 24))
-        contentView.addSubview(privacyModeSwitch)
+    private func buildLLMSection() -> NSView {
+        let card = createCard()
+        let stack = cardStack()
 
-        // Verbose Overlay
-        y -= rowHeight
-        addLabel("Verbose Overlay:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        verboseOverlaySwitch = NSSwitch(frame: NSRect(x: controlX, y: y, width: 40, height: 24))
-        contentView.addSubview(verboseOverlaySwitch)
+        llmEnabledSwitch = NSSwitch()
+        stack.addArrangedSubview(settingRow(label: "LLM Enabled", control: llmEnabledSwitch))
 
-        // Overlay Position
-        y -= rowHeight
-        addLabel("Overlay Position:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        overlayPositionPopUp = NSPopUpButton(frame: NSRect(x: controlX, y: y, width: controlWidth, height: 26))
-        overlayPositionPopUp.addItems(withTitles: ["Top", "Bottom"])
-        contentView.addSubview(overlayPositionPopUp)
-
-        // --- LLM Section ---
-        y -= 16
-        y = addSectionHeader("LLM", at: y, in: contentView)
-
-        // LLM Enabled
-        y -= rowHeight
-        addLabel("LLM Enabled:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        llmEnabledSwitch = NSSwitch(frame: NSRect(x: controlX, y: y, width: 40, height: 24))
-        contentView.addSubview(llmEnabledSwitch)
-
-        // Provider
-        y -= rowHeight
-        addLabel("Provider:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        providerPopUp = NSPopUpButton(frame: NSRect(x: controlX, y: y, width: controlWidth, height: 26))
+        providerPopUp = NSPopUpButton()
         providerPopUp.addItems(withTitles: ["OpenAI", "Anthropic", "Ollama", "LM Studio"])
         providerPopUp.target = self
         providerPopUp.action = #selector(providerChanged)
-        contentView.addSubview(providerPopUp)
+        stack.addArrangedSubview(settingRow(label: "Provider", control: providerPopUp))
 
-        // Endpoint
-        y -= rowHeight
-        addLabel("Endpoint:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        endpointField = NSTextField(frame: NSRect(x: controlX, y: y, width: controlWidth, height: 24))
-        endpointField.placeholderString = "Ollama :11434 / LM Studio :1234 — must end with /v1/chat/completions"
-        contentView.addSubview(endpointField)
-
-        // Model
-        y -= rowHeight
-        addLabel("Model:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        modelField = NSTextField(frame: NSRect(x: controlX, y: y, width: controlWidth, height: 24))
+        modelField = NSTextField()
         modelField.placeholderString = "llama3.2"
-        contentView.addSubview(modelField)
+        stack.addArrangedSubview(settingRow(label: "Model", control: modelField))
 
-        // API Key
-        y -= rowHeight
-        addLabel("API Key:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
-        apiKeyField = NSSecureTextField(frame: NSRect(x: controlX, y: y, width: controlWidth, height: 24))
+        endpointField = NSTextField()
+        endpointField.placeholderString = "http://localhost:11434/v1/chat/completions"
+        endpointLabel = NSTextField(labelWithString: "Endpoint")
+        stack.addArrangedSubview(settingRow(labelView: endpointLabel, control: endpointField))
+
+        apiKeyField = NSSecureTextField()
         apiKeyField.placeholderString = "sk-..."
-        contentView.addSubview(apiKeyField)
+        apiKeyLabel = NSTextField(labelWithString: "API Key")
+        stack.addArrangedSubview(settingRow(labelView: apiKeyLabel, control: apiKeyField))
 
-        // System Prompt
-        y -= rowHeight
-        addLabel("System Prompt:", at: NSPoint(x: labelX, y: y + 2), in: contentView)
+        // System prompt
+        let promptLabel = NSTextField(labelWithString: "System Prompt")
+        promptLabel.font = .systemFont(ofSize: 13)
+        promptLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let promptHeight: CGFloat = 100
-        y -= promptHeight - rowHeight + 8
-        let scrollView = NSScrollView(frame: NSRect(x: controlX, y: y, width: controlWidth, height: promptHeight))
+        let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.borderType = .bezelBorder
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.heightAnchor.constraint(equalToConstant: 100).isActive = true
 
-        systemPromptView = NSTextView(frame: NSRect(x: 0, y: 0, width: controlWidth - 2, height: promptHeight))
+        systemPromptView = NSTextView()
         systemPromptView.isEditable = true
         systemPromptView.isRichText = false
         systemPromptView.font = .systemFont(ofSize: 12)
         systemPromptView.isAutomaticQuoteSubstitutionEnabled = false
         systemPromptView.isAutomaticDashSubstitutionEnabled = false
         systemPromptView.textContainerInset = NSSize(width: 4, height: 4)
-        systemPromptView.minSize = NSSize(width: 0, height: promptHeight)
+        systemPromptView.minSize = NSSize(width: 0, height: 100)
         systemPromptView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
         systemPromptView.isVerticallyResizable = true
         systemPromptView.textContainer?.widthTracksTextView = true
+        systemPromptView.autoresizingMask = [.width]
         scrollView.documentView = systemPromptView
-        contentView.addSubview(scrollView)
 
-        // --- Files Section ---
-        y -= 16
-        y = addSectionHeader("Files", at: y, in: contentView)
+        let promptRow = NSStackView()
+        promptRow.orientation = .vertical
+        promptRow.alignment = .leading
+        promptRow.spacing = 6
+        promptRow.addArrangedSubview(promptLabel)
+        promptRow.addArrangedSubview(scrollView)
+        scrollView.widthAnchor.constraint(equalTo: promptRow.widthAnchor).isActive = true
 
-        y -= rowHeight
+        stack.addArrangedSubview(promptRow)
+
+        card.addSubview(stack)
+        pinInside(stack, to: card, padding: 16)
+        return card
+    }
+
+    private func buildOverlaySection() -> NSView {
+        let card = createCard()
+        let stack = cardStack()
+
+        verboseOverlaySwitch = NSSwitch()
+        stack.addArrangedSubview(settingRow(label: "Verbose Overlay", control: verboseOverlaySwitch))
+
+        overlayPositionPopUp = NSPopUpButton()
+        overlayPositionPopUp.addItems(withTitles: ["Top", "Bottom"])
+        stack.addArrangedSubview(settingRow(label: "Overlay Position", control: overlayPositionPopUp))
+
+        card.addSubview(stack)
+        pinInside(stack, to: card, padding: 16)
+        return card
+    }
+
+    private func buildFilesSection() -> NSView {
+        let card = createCard()
+        let stack = cardStack()
+
         let dictButton = NSButton(title: "Edit Dictionary...", target: self, action: #selector(openDictionary))
-        dictButton.frame = NSRect(x: controlX, y: y, width: 140, height: 24)
         dictButton.bezelStyle = .rounded
-        contentView.addSubview(dictButton)
+        stack.addArrangedSubview(dictButton)
 
         let snippetsButton = NSButton(title: "Edit Snippets...", target: self, action: #selector(openSnippets))
-        snippetsButton.frame = NSRect(x: controlX + 150, y: y, width: 140, height: 24)
         snippetsButton.bezelStyle = .rounded
-        contentView.addSubview(snippetsButton)
+        stack.addArrangedSubview(snippetsButton)
 
-        // --- Save Button ---
-        y -= 48
-        let saveButton = NSButton(title: "Save", target: self, action: #selector(saveClicked))
-        saveButton.frame = NSRect(x: contentView.bounds.width - 100, y: y, width: 80, height: 32)
-        saveButton.bezelStyle = .rounded
-        saveButton.keyEquivalent = "\r"
-        contentView.addSubview(saveButton)
+        card.addSubview(stack)
+        pinInside(stack, to: card, padding: 16)
+        return card
     }
 
-    private func addLabel(_ text: String, at origin: NSPoint, in view: NSView) {
-        let label = NSTextField(labelWithString: text)
-        label.frame = NSRect(x: origin.x, y: origin.y, width: 140, height: 20)
-        label.alignment = .right
-        label.font = .systemFont(ofSize: 13)
-        view.addSubview(label)
+    // MARK: - Card & Row Helpers
+
+    private func createCard() -> NSView {
+        let box = NSView()
+        box.wantsLayer = true
+        box.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        box.layer?.cornerRadius = 10
+        box.translatesAutoresizingMaskIntoConstraints = false
+        return box
     }
 
-    private func addSectionHeader(_ text: String, at y: CGFloat, in view: NSView) -> CGFloat {
-        let label = NSTextField(labelWithString: text)
-        label.frame = NSRect(x: 20, y: y - 24, width: 460, height: 20)
-        label.font = .boldSystemFont(ofSize: 13)
-        view.addSubview(label)
+    private func cardStack() -> NSStackView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
+    }
 
-        let separator = NSBox(frame: NSRect(x: 20, y: y - 28, width: 480, height: 1))
-        separator.boxType = .separator
-        view.addSubview(separator)
+    private func settingRow(label: String, control: NSView, hint: String? = nil) -> NSView {
+        let labelView = NSTextField(labelWithString: label)
+        return settingRow(labelView: labelView, control: control, hint: hint)
+    }
 
-        return y - 32
+    private func settingRow(labelView: NSTextField, control: NSView, hint: String? = nil) -> NSView {
+        labelView.font = .systemFont(ofSize: 13)
+        labelView.translatesAutoresizingMaskIntoConstraints = false
+        labelView.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        labelView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        labelView.widthAnchor.constraint(greaterThanOrEqualToConstant: 110).isActive = true
+
+        control.translatesAutoresizingMaskIntoConstraints = false
+
+        if let hint = hint {
+            let hintLabel = NSTextField(labelWithString: hint)
+            hintLabel.font = .systemFont(ofSize: 11)
+            hintLabel.textColor = .secondaryLabelColor
+            hintLabel.translatesAutoresizingMaskIntoConstraints = false
+
+            let rightStack = NSStackView(views: [control, hintLabel])
+            rightStack.orientation = .horizontal
+            rightStack.spacing = 8
+            rightStack.translatesAutoresizingMaskIntoConstraints = false
+
+            let row = NSStackView(views: [labelView, rightStack])
+            row.orientation = .horizontal
+            row.alignment = .centerY
+            row.spacing = 12
+            row.translatesAutoresizingMaskIntoConstraints = false
+            rightStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            return row
+        }
+
+        let row = NSStackView(views: [labelView, control])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 12
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        if control is NSPopUpButton || control is NSTextField || control is NSSecureTextField || control is NSStackView {
+            control.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            row.distribution = .fill
+        }
+
+        return row
+    }
+
+    private func pinInside(_ child: NSView, to parent: NSView, padding: CGFloat) {
+        child.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            child.topAnchor.constraint(equalTo: parent.topAnchor, constant: padding),
+            child.leadingAnchor.constraint(equalTo: parent.leadingAnchor, constant: padding),
+            child.trailingAnchor.constraint(equalTo: parent.trailingAnchor, constant: -padding),
+            child.bottomAnchor.constraint(equalTo: parent.bottomAnchor, constant: -padding),
+        ])
     }
 
     // MARK: - Load/Save
 
     private func loadValues() {
         hotkeyModePopUp.selectItem(at: settings.hotkeyMode == .toggle ? 0 : 1)
+        languagePopUp.selectItem(at:
+            Settings.supportedLanguages.firstIndex(where: { $0.code == settings.whisperLanguage }) ?? 0)
+
         enginePopUp.selectItem(at: settings.sttEngine == .apple ? 0 : 1)
-
-        if let idx = Settings.supportedLanguages.firstIndex(where: { $0.code == settings.whisperLanguage }) {
-            languagePopUp.selectItem(at: idx)
-        }
-
         whisperModelField.stringValue = settings.whisperModelPath
+        updateWhisperVisibility()
+
         flowModeSwitch.state = settings.flowMode ? .on : .off
         codeModeSwitch.state = settings.codeMode ? .on : .off
         privacyModeSwitch.state = settings.privacyMode ? .on : .off
+
         verboseOverlaySwitch.state = settings.verboseOverlay ? .on : .off
         overlayPositionPopUp.selectItem(at: settings.overlayPosition == .top ? 0 : 1)
 
@@ -284,6 +517,11 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         let isCloud = provider == .openai || provider == .anthropic
         endpointField.isEnabled = false
         apiKeyField.isEnabled = isCloud
+
+        // Show/hide endpoint and API key rows
+        endpointLabel.superview?.superview?.isHidden = false
+        apiKeyLabel.superview?.superview?.isHidden = !isCloud
+
         switch provider {
         case .openai:
             endpointField.stringValue = ""
@@ -300,6 +538,11 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             endpointField.placeholderString = "http://localhost:1234/v1/chat/completions"
             apiKeyField.stringValue = ""
         }
+    }
+
+    private func updateWhisperVisibility() {
+        let isWhisper = enginePopUp.indexOfSelectedItem == 1
+        whisperModelLabel.superview?.superview?.isHidden = !isWhisper
     }
 
     @objc private func saveClicked() {
@@ -330,6 +573,10 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
 
     @objc private func providerChanged() {
         updateFieldStates()
+    }
+
+    @objc private func engineChanged() {
+        updateWhisperVisibility()
     }
 
     @objc private func browseWhisperModel() {

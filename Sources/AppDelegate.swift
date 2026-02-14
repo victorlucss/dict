@@ -38,7 +38,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func postOnboardingSetup() {
         appleSpeech.requestAuthorization()
         TextInjector.checkAccessibility()
-        UpdateChecker.checkForUpdate()
+        UpdateChecker.checkForUpdate(silent: true)
         Log.info("Dict is running. Press Option+Space to dictate.")
         Log.info("STT engine: \(settings.sttEngine.rawValue)")
         Log.info("LLM cleanup: \(settings.llmEnabled ? "on" : "off")")
@@ -82,13 +82,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func rebuildMenu() {
         let menu = NSMenu()
 
-        menu.addItem(NSMenuItem(title: "Dict — Voice to Text", action: nil, keyEquivalent: ""))
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        menu.addItem(NSMenuItem(title: "Dict v\(version)", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
 
-        let modeLabel = settings.hotkeyMode == .toggle ? "toggle" : "push to talk"
-        let shortcutItem = NSMenuItem(title: "Shortcut: Option+Space (\(modeLabel))", action: nil, keyEquivalent: "")
-        shortcutItem.isEnabled = false
-        menu.addItem(shortcutItem)
+        let toggleItem = NSMenuItem(title: "Toggle Mode", action: #selector(switchToToggle), keyEquivalent: "")
+        toggleItem.target = self
+        toggleItem.state = settings.hotkeyMode == .toggle ? .on : .off
+        menu.addItem(toggleItem)
+
+        let pttItem = NSMenuItem(title: "Push to Talk", action: #selector(switchToPushToTalk), keyEquivalent: "")
+        pttItem.target = self
+        pttItem.state = settings.hotkeyMode == .pushToTalk ? .on : .off
+        menu.addItem(pttItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -109,6 +115,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         accessItem.target = self
         accessItem.isEnabled = !AXIsProcessTrusted()
         menu.addItem(accessItem)
+
+        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "u")
+        updateItem.target = self
+        menu.addItem(updateItem)
 
         menu.addItem(NSMenuItem.separator())
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
@@ -328,6 +338,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let snippetsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config/dict/snippets.json").path
         NSWorkspace.shared.open(URL(fileURLWithPath: snippetsPath))
+    }
+
+    @objc private func switchToToggle() {
+        settings.hotkeyMode = .toggle
+        rebuildMenu()
+    }
+
+    @objc private func switchToPushToTalk() {
+        settings.hotkeyMode = .pushToTalk
+        rebuildMenu()
+    }
+
+    @objc private func checkForUpdates() {
+        UpdateChecker.checkForUpdate()
     }
 
     @objc private func quit() {
