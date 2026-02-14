@@ -1,34 +1,27 @@
 import AppKit
 import Foundation
 
-/// Checks GitHub Releases for a newer version on launch.
-/// Compares semver from the latest release tag against the app's bundle version.
+/// Checks dict.tianxu.cloud/version for a newer version on launch.
+/// If the remote version differs, prompts the user to open dict.studio to download.
 enum UpdateChecker {
     private static let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+    private static let versionURL = URL(string: "https://dict.tianxu.cloud/version")!
+    private static let downloadURL = URL(string: "https://dict.studio")!
 
     static func checkForUpdate() {
-        let repo = Settings.shared.githubRepo
-        guard !repo.isEmpty else { return }
-
-        let urlString = "https://api.github.com/repos/\(repo)/releases/latest"
-        guard let url = URL(string: urlString) else { return }
-
-        var request = URLRequest(url: url)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        var request = URLRequest(url: versionURL)
         request.timeoutInterval = 10
 
         URLSession.shared.dataTask(with: request) { data, _, error in
-            guard let data = data, error == nil else { return }
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let tagName = json["tag_name"] as? String,
-                  let htmlURL = json["html_url"] as? String
+            guard let data = data, error == nil,
+                  let remoteVersion = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !remoteVersion.isEmpty
             else { return }
 
-            let remoteVersion = tagName.trimmingCharacters(in: CharacterSet.letters.union(.whitespaces))
-
-            if isNewer(remoteVersion, than: currentVersion) {
+            if remoteVersion != currentVersion {
+                Log.info("Update available: v\(remoteVersion) (current: v\(currentVersion))")
                 DispatchQueue.main.async {
-                    showUpdateAlert(version: remoteVersion, url: htmlURL)
+                    showUpdateAlert(version: remoteVersion)
                 }
             } else {
                 Log.info("Up to date (v\(currentVersion))")
@@ -36,19 +29,7 @@ enum UpdateChecker {
         }.resume()
     }
 
-    private static func isNewer(_ remote: String, than local: String) -> Bool {
-        let r = remote.split(separator: ".").compactMap { Int($0) }
-        let l = local.split(separator: ".").compactMap { Int($0) }
-        for i in 0..<max(r.count, l.count) {
-            let rv = i < r.count ? r[i] : 0
-            let lv = i < l.count ? l[i] : 0
-            if rv > lv { return true }
-            if rv < lv { return false }
-        }
-        return false
-    }
-
-    private static func showUpdateAlert(version: String, url: String) {
+    private static func showUpdateAlert(version: String) {
         let alert = NSAlert()
         alert.messageText = "Dict v\(version) Available"
         alert.informativeText = "A new version of Dict is available. You're running v\(currentVersion)."
@@ -57,9 +38,7 @@ enum UpdateChecker {
         alert.alertStyle = .informational
 
         if alert.runModal() == .alertFirstButtonReturn {
-            if let downloadURL = URL(string: url) {
-                NSWorkspace.shared.open(downloadURL)
-            }
+            NSWorkspace.shared.open(downloadURL)
         }
     }
 }

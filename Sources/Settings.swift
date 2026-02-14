@@ -54,7 +54,6 @@ class Settings {
         var verboseOverlay: Bool = false
         var overlayPosition: OverlayPosition = .top
         var onboardingDone: Bool = false
-        var githubRepo: String = ""
 
         init() {}
 
@@ -76,7 +75,6 @@ class Settings {
             verboseOverlay = (try? c.decode(Bool.self, forKey: .verboseOverlay)) ?? defaults.verboseOverlay
             overlayPosition = (try? c.decode(OverlayPosition.self, forKey: .overlayPosition)) ?? defaults.overlayPosition
             onboardingDone = (try? c.decode(Bool.self, forKey: .onboardingDone)) ?? defaults.onboardingDone
-            githubRepo = (try? c.decode(String.self, forKey: .githubRepo)) ?? defaults.githubRepo
         }
     }
 
@@ -163,11 +161,6 @@ class Settings {
     var onboardingDone: Bool {
         get { data.onboardingDone }
         set { data.onboardingDone = newValue; save() }
-    }
-
-    var githubRepo: String {
-        get { data.githubRepo }
-        set { data.githubRepo = newValue; save() }
     }
 
     // MARK: - Persistence

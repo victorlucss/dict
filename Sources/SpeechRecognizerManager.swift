@@ -12,6 +12,8 @@ class SpeechRecognizerManager {
     private let audioEngine = AVAudioEngine()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    private var lastPartialText: String = ""
+    private var delivered = false
 
     private static func localeIdentifier(for code: String) -> String {
         switch code {
@@ -46,6 +48,8 @@ class SpeechRecognizerManager {
     func startListening() {
         recognitionTask?.cancel()
         recognitionTask = nil
+        lastPartialText = ""
+        delivered = false
 
         let localeID = Self.localeIdentifier(for: Settings.shared.whisperLanguage)
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: localeID))
@@ -93,15 +97,17 @@ class SpeechRecognizerManager {
         }
 
         recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self = self else { return }
+            guard let self = self, !self.delivered else { return }
 
             if let result = result {
                 let text = result.bestTranscription.formattedString
                 if result.isFinal {
+                    self.delivered = true
                     DispatchQueue.main.async {
                         self.onResult?(text)
                     }
                 } else {
+                    self.lastPartialText = text
                     DispatchQueue.main.async {
                         self.onPartialResult?(text)
                     }
@@ -110,7 +116,15 @@ class SpeechRecognizerManager {
 
             if let error = error {
                 let nsError = error as NSError
+                // 216 = request was cancelled (normal on stop)
                 if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 216 {
+                    // Task ended without a final result — use last partial
+                    if !self.delivered && !self.lastPartialText.isEmpty {
+                        self.delivered = true
+                        DispatchQueue.main.async {
+                            self.onResult?(self.lastPartialText)
+                        }
+                    }
                     return
                 }
                 DispatchQueue.main.async {
@@ -125,5 +139,17 @@ class SpeechRecognizerManager {
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
         recognitionRequest = nil
+        // Don't cancel recognitionTask — let it finish processing and deliver isFinal.
+        // A 3s safety timeout ensures we don't hang forever.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            guard let self = self, !self.delivered else { return }
+            // Timed out waiting for final result — use last partial
+            if !self.lastPartialText.isEmpty {
+                self.delivered = true
+                self.onResult?(self.lastPartialText)
+            }
+            self.recognitionTask?.cancel()
+            self.recognitionTask = nil
+        }
     }
 }
