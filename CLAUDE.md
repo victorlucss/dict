@@ -18,6 +18,9 @@ swift build
 # Release build + .app bundle + DMG
 ./scripts/build.sh --dmg
 
+# Release build + signed & notarized DMG
+CODESIGN_IDENTITY="Developer ID Application: ..." NOTARY_PROFILE="dict-notary" ./scripts/build.sh --dmg
+
 # Run the app
 open Dict.app
 ```
