@@ -220,8 +220,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         appleSpeech.onError = { [weak self] error in
             Log.error("Apple Speech error: \(error)")
-            self?.overlay.hide()
             self?.stopRecording()
+            self?.stopPushToTalkMonitor()
+            DispatchQueue.main.async {
+                self?.overlay.hide()
+            }
         }
         appleSpeech.onAudioLevel = { [weak self] level in
             self?.overlay.updateLevel(level)
@@ -232,8 +235,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         whisperSTT.onError = { [weak self] error in
             Log.error("Whisper error: \(error)")
-            self?.overlay.hide()
             self?.stopRecording()
+            self?.stopPushToTalkMonitor()
+            DispatchQueue.main.async {
+                self?.overlay.hide()
+            }
         }
         whisperSTT.onAudioLevel = { [weak self] level in
             self?.overlay.updateLevel(level)
