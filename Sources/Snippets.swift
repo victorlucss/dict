@@ -1,3 +1,4 @@
+import DictCore
 import Foundation
 
 /// Voice-triggered text snippets. When transcribed speech matches a trigger phrase,
@@ -34,13 +35,7 @@ class Snippets {
     }
 
     private func normalize(_ text: String) -> String {
-        text.lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .components(separatedBy: .whitespaces)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-            // Strip trailing punctuation that STT may add
-            .trimmingCharacters(in: .punctuationCharacters)
+        normalizeTranscription(text)
     }
 
     func load() {

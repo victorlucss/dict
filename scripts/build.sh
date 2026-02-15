@@ -9,6 +9,13 @@ APP_BUNDLE="$PROJECT_DIR/$APP_NAME.app"
 DMG_PATH="$PROJECT_DIR/$APP_NAME.dmg"
 VERSION=$(plutil -extract CFBundleShortVersionString raw "$PROJECT_DIR/Resources/Info.plist")
 
+cleanup_dmg() {
+    rm -f "$PROJECT_DIR/rw-$APP_NAME.dmg"
+    if mount | grep -q "/Volumes/$APP_NAME"; then
+        hdiutil detach "/Volumes/$APP_NAME" -force 2>/dev/null || true
+    fi
+}
+
 echo "Building $APP_NAME v$VERSION..."
 cd "$PROJECT_DIR"
 swift build -c release
@@ -37,6 +44,7 @@ echo "App bundle created at: $APP_BUNDLE"
 # Build DMG if --dmg flag is passed
 if [[ "${1:-}" == "--dmg" ]]; then
     echo "Creating DMG..."
+    trap cleanup_dmg EXIT
     rm -f "$DMG_PATH"
 
     # Generate DMG background image
@@ -54,18 +62,6 @@ if [[ "${1:-}" == "--dmg" ]]; then
     cp -R "$APP_BUNDLE" "$DMG_TMP/"
     ln -s /Applications "$DMG_TMP/Applications"
 
-    # Create setup instructions for unsigned builds
-    cat > "$DMG_TMP/Setup Instructions.txt" <<'INSTRUCTIONS'
-After dragging Dict to Applications, macOS may show:
-"Apple could not verify Dict is free of malware."
-
-To fix this, open Terminal and paste:
-
-    xattr -cr /Applications/Dict.app
-
-Then open Dict normally. You only need to do this once.
-INSTRUCTIONS
-
     mkdir -p "$DMG_TMP/.background"
     cp "$BACKGROUND" "$DMG_TMP/.background/bg.png"
 
@@ -80,7 +76,6 @@ INSTRUCTIONS
     # Mount writable DMG and style via AppleScript
     MOUNT_DIR=$(hdiutil attach -readwrite -noverify "$DMG_RW" | grep "/Volumes/" | sed 's/.*\/Volumes/\/Volumes/' | xargs)
     VOL_NAME=$(basename "$MOUNT_DIR")
-    echo "Mounted at: $MOUNT_DIR (volume: $VOL_NAME)"
     sleep 2
 
     # Hide extension on Dict.app
@@ -102,7 +97,6 @@ tell application "Finder"
         set background picture of opts to file ".background:bg.png"
         set position of item "Dict.app" of container window to {200, 200}
         set position of item "Applications" of container window to {600, 200}
-        set position of item "Setup Instructions.txt" of container window to {400, 310}
         close
         open
         update without registering applications
@@ -118,7 +112,6 @@ APPLESCRIPT
 
     # Hide dotfiles and clean up .fseventsd
     chflags hidden "$MOUNT_DIR/.background" 2>/dev/null || true
-    SetFile -a V "$MOUNT_DIR/.background" 2>/dev/null || true
     rm -rf "$MOUNT_DIR/.fseventsd" 2>/dev/null || true
 
     # Unmount and compress

@@ -7,15 +7,26 @@ let package = Package(
         .macOS(.v14)
     ],
     targets: [
+        .target(
+            name: "DictCore",
+            path: "Sources/DictCore"
+        ),
         .executableTarget(
             name: "Dict",
+            dependencies: ["DictCore"],
             path: "Sources",
+            exclude: ["DictCore"],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("Speech"),
             ]
-        )
+        ),
+        .testTarget(
+            name: "DictTests",
+            dependencies: ["DictCore"],
+            path: "Tests/DictTests"
+        ),
     ]
 )

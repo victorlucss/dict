@@ -14,6 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var isCancelled = false
     private var recordingStoppedAt: CFAbsoluteTime = 0
     private var pushToTalkMonitor: Any?
+    private var pushToTalkLocalMonitor: Any?
     private var escMonitor: Any?
     private var recordingTimer: Timer?
     private var recordingWarningTimer: Timer?
@@ -164,10 +165,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startPushToTalkMonitor() {
         stopPushToTalkMonitor()
-        // Monitor flagsChanged globally to detect Option key release,
+        // Monitor flagsChanged and keyUp to detect Option/Space release,
         // since Carbon kEventHotKeyReleased is unreliable when the
         // modifier key is released before or simultaneously with Space.
-        pushToTalkMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyUp]) { [weak self] event in
+        // Both global (other apps focused) and local (Dict focused) monitors
+        // are needed because each only sees events in its own context.
+        let handler: (NSEvent) -> Void = { [weak self] event in
             guard let self = self, self.isRecording, self.settings.hotkeyMode == .pushToTalk else { return }
 
             if event.type == .flagsChanged {
@@ -186,12 +189,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+
+        pushToTalkMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyUp], handler: handler)
+        pushToTalkLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyUp]) { event in
+            handler(event)
+            return event
+        }
     }
 
     private func stopPushToTalkMonitor() {
         if let monitor = pushToTalkMonitor {
             NSEvent.removeMonitor(monitor)
             pushToTalkMonitor = nil
+        }
+        if let monitor = pushToTalkLocalMonitor {
+            NSEvent.removeMonitor(monitor)
+            pushToTalkLocalMonitor = nil
         }
     }
 

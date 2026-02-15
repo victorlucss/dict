@@ -1,3 +1,4 @@
+import DictCore
 import Foundation
 
 /// Post-processes transcribed text through an LLM API.
@@ -105,13 +106,7 @@ class LLMProcessor {
     }
 
     private func parseOpenAIResponse(_ data: Data) -> String? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
-              let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String
-        else { return nil }
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        DictCore.parseOpenAIResponse(data)
     }
 
     // MARK: - Anthropic Messages API
@@ -139,12 +134,7 @@ class LLMProcessor {
     }
 
     private func parseAnthropicResponse(_ data: Data) -> String? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let content = json["content"] as? [[String: Any]],
-              let first = content.first,
-              let text = first["text"] as? String
-        else { return nil }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        DictCore.parseAnthropicResponse(data)
     }
 
     // MARK: - System Prompt

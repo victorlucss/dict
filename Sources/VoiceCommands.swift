@@ -1,3 +1,4 @@
+import DictCore
 import Foundation
 
 /// Voice-triggered keyboard shortcuts. When transcribed speech matches a trigger phrase,
@@ -33,12 +34,7 @@ class VoiceCommands {
     }
 
     private func normalize(_ text: String) -> String {
-        text.lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .components(separatedBy: .whitespaces)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-            .trimmingCharacters(in: .punctuationCharacters)
+        normalizeTranscription(text)
     }
 
     func load() {
