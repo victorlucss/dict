@@ -11,8 +11,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let overlay = RecordingOverlay()
     private let settings = Settings.shared
     private var isRecording = false
+    private var isCancelled = false
     private var recordingStoppedAt: CFAbsoluteTime = 0
     private var pushToTalkMonitor: Any?
+    private var escMonitor: Any?
+    private var recordingTimer: Timer?
+    private var recordingWarningTimer: Timer?
+    private let maxRecordingDuration: TimeInterval = 15
+    private let warningLeadTime: TimeInterval = 3
 
     private var preferencesWindow: PreferencesWindow?
     private var onboarding: OnboardingWindow?
@@ -109,6 +115,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let snippetsItem = NSMenuItem(title: "Edit Snippets...", action: #selector(openSnippets), keyEquivalent: "s")
         snippetsItem.target = self
         menu.addItem(snippetsItem)
+
+        let commandsItem = NSMenuItem(title: "Edit Commands...", action: #selector(openCommands), keyEquivalent: "")
+        commandsItem.target = self
+        menu.addItem(commandsItem)
 
         let accessibilityLabel = AXIsProcessTrusted() ? "Accessibility: Granted" : "Grant Accessibility..."
         let accessItem = NSMenuItem(title: accessibilityLabel, action: #selector(openAccessibility), keyEquivalent: "")
@@ -222,7 +232,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func startRecording() {
         guard !isRecording else { return }
         isRecording = true
+        isCancelled = false
         Log.info("Recording started (engine: \(settings.sttEngine.rawValue))")
+
+        // ESC to cancel recording
+        escMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 { // ESC
+                DispatchQueue.main.async {
+                    self?.cancelRecording()
+                }
+            }
+        }
 
         DispatchQueue.main.async {
             self.statusItem.button?.image = NSImage(
@@ -230,6 +250,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 accessibilityDescription: "Recording"
             )
             self.overlay.show()
+        }
+
+        // Start warning timer (fires 3s before limit)
+        recordingWarningTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration - warningLeadTime, repeats: false) { [weak self] _ in
+            self?.overlay.showWarning()
+        }
+
+        // Start hard limit timer
+        recordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false) { [weak self] _ in
+            guard let self = self, self.isRecording else { return }
+            Log.info("Recording limit reached (\(self.maxRecordingDuration)s)")
+            self.stopRecording()
+            self.stopPushToTalkMonitor()
         }
 
         switch settings.sttEngine {
@@ -240,10 +273,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func cancelRecording() {
+        guard isRecording else { return }
+        isCancelled = true
+        Log.info("Recording cancelled by user")
+
+        isRecording = false
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        recordingWarningTimer?.invalidate()
+        recordingWarningTimer = nil
+        if let monitor = escMonitor { NSEvent.removeMonitor(monitor); escMonitor = nil }
+        stopPushToTalkMonitor()
+
+        switch settings.sttEngine {
+        case .apple:
+            appleSpeech.stopListening()
+        case .whisper:
+            whisperSTT.stopRecording()
+        }
+
+        DispatchQueue.main.async {
+            self.statusItem.button?.image = NSImage(
+                systemSymbolName: "mic",
+                accessibilityDescription: "Dict"
+            )
+            self.overlay.hide()
+        }
+    }
+
     private func stopRecording() {
         guard isRecording else { return }
         isRecording = false
         recordingStoppedAt = CFAbsoluteTimeGetCurrent()
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        recordingWarningTimer?.invalidate()
+        recordingWarningTimer = nil
+        if let monitor = escMonitor { NSEvent.removeMonitor(monitor); escMonitor = nil }
         Log.info("Recording stopped")
 
         DispatchQueue.main.async {
@@ -263,6 +330,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleTranscription(_ text: String) {
+        guard !isCancelled else {
+            Log.info("Transcription discarded (cancelled).")
+            DispatchQueue.main.async { self.overlay.hide() }
+            return
+        }
         guard !text.isEmpty else {
             Log.info("Empty transcription, skipping.")
             DispatchQueue.main.async { self.overlay.hide() }
@@ -278,6 +350,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self.overlay.hide() }
             textInjector.type(expansion)
             Log.info("[Perf] Total: \(sttMs)ms (snippet)")
+            return
+        }
+
+        // Check for voice command match
+        if let keyCombo = VoiceCommands.shared.match(text) {
+            Log.info("Voice command matched: \"\(text)\" → \(keyCombo)")
+            DispatchQueue.main.async { self.overlay.hide() }
+            textInjector.simulateKeyCombo(keyCombo)
+            Log.info("[Perf] Total: \(sttMs)ms (command)")
             return
         }
 
@@ -338,6 +419,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let snippetsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config/dict/snippets.json").path
         NSWorkspace.shared.open(URL(fileURLWithPath: snippetsPath))
+    }
+
+    @objc private func openCommands() {
+        VoiceCommands.shared.save()
+        let commandsPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/dict/commands.json").path
+        NSWorkspace.shared.open(URL(fileURLWithPath: commandsPath))
     }
 
     @objc private func switchToToggle() {

@@ -45,12 +45,13 @@ HotkeyManager (Option+Space, Carbon API)
     → toggleRecording()
         → SpeechRecognizerManager (Apple on-device STT)
           OR WhisperSTT (records WAV → runs whisper-cli subprocess)
-            → LLMProcessor (optional, OpenAI-compatible API cleanup)
+            → LLMProcessor (optional, OpenAI-compatible API cleanup, accuracy level)
                 → TextInjector (clipboard + AppleScript Cmd+V paste)
 
-RecordingOverlay (floating HUD with audio level bars, shown while recording)
+RecordingOverlay (floating HUD with audio level bars, 15s limit with red warning border)
 Settings (singleton, persisted to ~/.config/dict/config.json)
-PreferencesWindow (buffered UI — changes only apply on Save)
+PreferencesWindow (sidebar + content pane layout, buffered UI — changes only apply on Save)
+UpdateChecker (compares semver against remote, only prompts when remote > current)
 ```
 
 **Key design decisions:**
@@ -60,8 +61,11 @@ PreferencesWindow (buffered UI — changes only apply on Save)
 - `LSUIElement = true` in Info.plist — menu bar only, no dock icon
 - Config lives at `~/.config/dict/config.json`, auto-created with defaults on first access
 - Settings uses a custom `init(from:)` decoder so missing keys fall back to defaults — adding new settings won't break existing config files
-- Preferences window buffers all changes until the user clicks Save (no live-apply)
+- Preferences window uses sidebar + content pane layout (5 sections: General, Speech, LLM, Overlay, Files), buffers all changes until Save
 - Push-to-talk mode guards against Carbon key-repeat events to avoid recreating the NSEvent monitor mid-hold
+- Recording has a 15-second hard limit with a red border warning 3 seconds before cutoff
+- LLM correction level (1–5 slider) controls how aggressively the LLM rewrites transcriptions — from minimal punctuation fixes to full rewriting
+- Update checker does proper semver comparison; falls back to reading Info.plist from disk when Bundle.main is unavailable
 
 ## Supported Languages
 

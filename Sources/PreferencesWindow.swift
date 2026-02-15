@@ -25,6 +25,8 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
 
     // LLM controls
     private var llmEnabledSwitch: NSSwitch!
+    private var accuracySlider: NSSlider!
+    private var accuracyLabel: NSTextField!
     private var providerPopUp: NSPopUpButton!
     private var endpointField: NSTextField!
     private var endpointLabel: NSTextField!
@@ -116,10 +118,20 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         sectionTitleLabel.translatesAutoresizingMaskIntoConstraints = false
         contentPane.addSubview(sectionTitleLabel)
 
-        // Content container (swapped per section)
-        contentContainer = NSView()
+        // Scrollable content container (swapped per section)
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        contentContainer = FlippedView()
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
-        contentPane.addSubview(contentContainer)
+        scrollView.documentView = contentContainer
+        contentPane.addSubview(scrollView)
 
         // Save button
         let saveButton = NSButton(title: "Save", target: self, action: #selector(saveClicked))
@@ -152,10 +164,10 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             sectionTitleLabel.topAnchor.constraint(equalTo: contentPane.topAnchor, constant: 20),
             sectionTitleLabel.leadingAnchor.constraint(equalTo: contentPane.leadingAnchor, constant: 24),
 
-            contentContainer.topAnchor.constraint(equalTo: sectionTitleLabel.bottomAnchor, constant: 16),
-            contentContainer.leadingAnchor.constraint(equalTo: contentPane.leadingAnchor, constant: 24),
-            contentContainer.trailingAnchor.constraint(equalTo: contentPane.trailingAnchor, constant: -24),
-            contentContainer.bottomAnchor.constraint(equalTo: saveButton.topAnchor, constant: -16),
+            scrollView.topAnchor.constraint(equalTo: sectionTitleLabel.bottomAnchor, constant: 16),
+            scrollView.leadingAnchor.constraint(equalTo: contentPane.leadingAnchor, constant: 24),
+            scrollView.trailingAnchor.constraint(equalTo: contentPane.trailingAnchor, constant: -24),
+            scrollView.bottomAnchor.constraint(equalTo: saveButton.topAnchor, constant: -16),
 
             saveButton.trailingAnchor.constraint(equalTo: contentPane.trailingAnchor, constant: -24),
             saveButton.bottomAnchor.constraint(equalTo: contentPane.bottomAnchor, constant: -16),
@@ -221,11 +233,17 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         let sectionView = sectionViews[index]
         sectionView.translatesAutoresizingMaskIntoConstraints = false
         contentContainer.addSubview(sectionView)
+
+        guard let scrollView = contentContainer.enclosingScrollView else { return }
         NSLayoutConstraint.activate([
             sectionView.topAnchor.constraint(equalTo: contentContainer.topAnchor),
             sectionView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
             sectionView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
+            sectionView.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
+            contentContainer.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
         ])
+        contentContainer.layoutSubtreeIfNeeded()
+        scrollView.documentView = contentContainer
     }
 
     // MARK: - Section Builders
@@ -300,6 +318,25 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         llmEnabledSwitch = NSSwitch()
         stack.addArrangedSubview(settingRow(label: "LLM Enabled", control: llmEnabledSwitch))
 
+        // Accuracy slider: 1 (minimal cleanup) to 5 (aggressive rewriting)
+        accuracySlider = NSSlider(value: 3, minValue: 1, maxValue: 5, target: self, action: #selector(accuracyChanged))
+        accuracySlider.numberOfTickMarks = 5
+        accuracySlider.allowsTickMarkValuesOnly = true
+        accuracySlider.translatesAutoresizingMaskIntoConstraints = false
+        accuracySlider.widthAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
+
+        accuracyLabel = NSTextField(labelWithString: "Balanced")
+        accuracyLabel.font = .systemFont(ofSize: 11)
+        accuracyLabel.textColor = .secondaryLabelColor
+        accuracyLabel.translatesAutoresizingMaskIntoConstraints = false
+        accuracyLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 70).isActive = true
+
+        let sliderRow = NSStackView(views: [accuracySlider, accuracyLabel])
+        sliderRow.orientation = .horizontal
+        sliderRow.spacing = 8
+        sliderRow.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(settingRow(label: "Correction Level", control: sliderRow))
+
         providerPopUp = NSPopUpButton()
         providerPopUp.addItems(withTitles: ["OpenAI", "Anthropic", "Ollama", "LM Studio"])
         providerPopUp.target = self
@@ -347,13 +384,13 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
 
         let promptRow = NSStackView()
         promptRow.orientation = .vertical
-        promptRow.alignment = .leading
+        promptRow.alignment = .width
         promptRow.spacing = 6
         promptRow.addArrangedSubview(promptLabel)
         promptRow.addArrangedSubview(scrollView)
-        scrollView.widthAnchor.constraint(equalTo: promptRow.widthAnchor).isActive = true
 
         stack.addArrangedSubview(promptRow)
+        promptRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         card.addSubview(stack)
         pinInside(stack, to: card, padding: 16)
@@ -387,6 +424,10 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         let snippetsButton = NSButton(title: "Edit Snippets...", target: self, action: #selector(openSnippets))
         snippetsButton.bezelStyle = .rounded
         stack.addArrangedSubview(snippetsButton)
+
+        let commandsButton = NSButton(title: "Edit Commands...", target: self, action: #selector(openCommands))
+        commandsButton.bezelStyle = .rounded
+        stack.addArrangedSubview(commandsButton)
 
         card.addSubview(stack)
         pinInside(stack, to: card, padding: 16)
@@ -490,6 +531,8 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         overlayPositionPopUp.selectItem(at: settings.overlayPosition == .top ? 0 : 1)
 
         llmEnabledSwitch.state = settings.llmEnabled ? .on : .off
+        accuracySlider.doubleValue = Double(settings.llmAccuracy)
+        accuracyLabel.stringValue = accuracyLabelText(for: settings.llmAccuracy)
         switch settings.llmProvider {
         case .openai: providerPopUp.selectItem(at: 0)
         case .anthropic: providerPopUp.selectItem(at: 1)
@@ -519,8 +562,8 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         apiKeyField.isEnabled = isCloud
 
         // Show/hide endpoint and API key rows
-        endpointLabel.superview?.superview?.isHidden = false
-        apiKeyLabel.superview?.superview?.isHidden = !isCloud
+        endpointLabel.superview?.isHidden = false
+        apiKeyLabel.superview?.isHidden = !isCloud
 
         switch provider {
         case .openai:
@@ -542,7 +585,7 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
 
     private func updateWhisperVisibility() {
         let isWhisper = enginePopUp.indexOfSelectedItem == 1
-        whisperModelLabel.superview?.superview?.isHidden = !isWhisper
+        whisperModelLabel.superview?.isHidden = !isWhisper
     }
 
     @objc private func saveClicked() {
@@ -558,6 +601,7 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         settings.verboseOverlay = verboseOverlaySwitch.state == .on
         settings.overlayPosition = overlayPositionPopUp.indexOfSelectedItem == 0 ? .top : .bottom
         settings.llmEnabled = llmEnabledSwitch.state == .on
+        settings.llmAccuracy = Int(accuracySlider.doubleValue)
         settings.llmProvider = selectedProvider()
         settings.llmEndpoint = endpointField.stringValue
         settings.llmModel = modelField.stringValue
@@ -573,6 +617,20 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
 
     @objc private func providerChanged() {
         updateFieldStates()
+    }
+
+    @objc private func accuracyChanged() {
+        accuracyLabel.stringValue = accuracyLabelText(for: Int(accuracySlider.doubleValue))
+    }
+
+    private func accuracyLabelText(for value: Int) -> String {
+        switch value {
+        case 1: return "Minimal"
+        case 2: return "Light"
+        case 3: return "Balanced"
+        case 4: return "Thorough"
+        default: return "Aggressive"
+        }
     }
 
     @objc private func engineChanged() {
@@ -604,4 +662,20 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             .appendingPathComponent(".config/dict/snippets.json").path
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
+
+    @objc private func openCommands() {
+        VoiceCommands.shared.save()
+        let path = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/dict/commands.json").path
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        close()
+    }
+}
+
+/// NSView subclass that flips the coordinate system so content lays out from the top.
+private class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }
