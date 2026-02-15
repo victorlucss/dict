@@ -19,7 +19,7 @@ swift build
 ./scripts/build.sh --dmg
 
 # Release build + signed & notarized DMG
-CODESIGN_IDENTITY="Developer ID Application: ..." NOTARY_PROFILE="dict-notary" ./scripts/build.sh --dmg
+CODESIGN_IDENTITY="Developer ID Application: Victor Lucas da Silva Monteiro (9J2K2AFDLJ)" NOTARY_PROFILE="dict-notary" ./scripts/build.sh --dmg
 
 # Run the app
 open Dict.app
@@ -31,13 +31,34 @@ There are no tests or linter configured yet. The project uses Swift Package Mana
 
 Versioning follows semver. The version lives in `Resources/Info.plist` (`CFBundleShortVersionString` and `CFBundleVersion`).
 
-To release a new version:
+### Automated (GitHub Actions)
+
 1. Bump the version in `Resources/Info.plist` (both `CFBundleShortVersionString` and `CFBundleVersion`)
 2. Commit and push to `main`
 3. The GitHub Actions pipeline (`.github/workflows/release.yml`) automatically:
    - Builds the DMG on a macOS 14 runner
    - Creates a GitHub Release tagged `vX.Y.Z` with the DMG attached
    - Skips if a tag for that version already exists
+
+### Manual (local signed & notarized DMG)
+
+1. Bump the version in `Resources/Info.plist` (both `CFBundleShortVersionString` and `CFBundleVersion`)
+2. Build the signed and notarized DMG:
+   ```bash
+   CODESIGN_IDENTITY="Developer ID Application: Victor Lucas da Silva Monteiro (9J2K2AFDLJ)" NOTARY_PROFILE="dict-notary" ./scripts/build.sh --dmg
+   ```
+3. The DMG is output to `Dict.dmg` in the project root, ready for distribution
+4. Commit and push to `main`
+
+The notary profile `dict-notary` is stored in the local Keychain. To recreate it on a new machine:
+```bash
+xcrun notarytool store-credentials "dict-notary" \
+  --apple-id "YOUR_APPLE_ID" \
+  --team-id "9J2K2AFDLJ" \
+  --password "APP_SPECIFIC_PASSWORD"
+```
+
+Without notarization, macOS Gatekeeper will block the app with "Apple could not verify" — signing alone is not enough.
 
 ## Architecture
 
