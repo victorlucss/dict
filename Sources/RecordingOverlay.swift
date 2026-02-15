@@ -13,6 +13,8 @@ class RecordingOverlay {
     private var currentWidth: CGFloat { verbose ? 200 : 100 }
     private var currentHeight: CGFloat { verbose ? 44 : 28 }
 
+    private var containerView: NSView?
+
     func show() {
         guard window == nil else { return }
 
@@ -49,6 +51,7 @@ class RecordingOverlay {
         container.wantsLayer = true
         container.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
         container.layer?.cornerRadius = h / 2
+        self.containerView = container
 
         if verbose {
             let level = DotLevelView(frame: NSRect(x: 12, y: 16, width: w - 24, height: 16))
@@ -80,6 +83,15 @@ class RecordingOverlay {
         window = nil
         levelView = nil
         textField = nil
+        containerView = nil
+    }
+
+    func showWarning() {
+        DispatchQueue.main.async {
+            guard let layer = self.containerView?.layer else { return }
+            layer.borderColor = CGColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1.0)
+            layer.borderWidth = 2
+        }
     }
 
     func updateLevel(_ level: Float) {

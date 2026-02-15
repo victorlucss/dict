@@ -153,6 +153,26 @@ class LLMProcessor {
         let settings = Settings.shared
         var prompt = settings.llmPrompt
 
+        // Correction level (1 = minimal, 5 = aggressive)
+        let level = max(1, min(5, settings.llmAccuracy))
+        switch level {
+        case 1:
+            prompt += "\n\nCORRECTION LEVEL: Minimal. Only fix obvious typos and add basic punctuation. " +
+                "Do NOT change any words, phrasing, or sentence structure. Preserve the speaker's exact wording."
+        case 2:
+            prompt += "\n\nCORRECTION LEVEL: Light. Fix punctuation, capitalization, and remove filler words. " +
+                "Do NOT rephrase, reorder, or substitute words. Keep the speaker's original wording intact."
+        case 3:
+            prompt += "\n\nCORRECTION LEVEL: Balanced. Fix grammar, punctuation, and remove filler words. " +
+                "Minor rephrasing is OK for clarity, but stay close to the original wording."
+        case 4:
+            prompt += "\n\nCORRECTION LEVEL: Thorough. Fix all grammar and punctuation. " +
+                "Rephrase for clarity and flow. You may change word choice to improve readability."
+        default:
+            prompt += "\n\nCORRECTION LEVEL: Aggressive. Fully rewrite for proper grammar, structure, and clarity. " +
+                "Reorder sentences, change words, and improve flow as needed. Make it read as polished written text."
+        }
+
         // App-aware context
         let appContext = appContextHint(for: frontmostApp)
         if !appContext.isEmpty {

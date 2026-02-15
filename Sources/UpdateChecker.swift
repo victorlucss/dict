@@ -4,7 +4,18 @@ import Foundation
 /// Checks dict.tianxu.cloud/version for a newer version.
 /// If the remote version differs, prompts the user to download.
 enum UpdateChecker {
-    private static let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+    private static let currentVersion: String = {
+        if let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+            return v
+        }
+        // Fallback: read from Info.plist on disk (when running outside .app bundle)
+        let plistPath = Bundle.main.bundlePath + "/../Resources/Info.plist"
+        if let dict = NSDictionary(contentsOfFile: plistPath),
+           let v = dict["CFBundleShortVersionString"] as? String {
+            return v
+        }
+        return "0.0.0"
+    }()
     private static let versionURL = URL(string: "https://dict.tianxu.cloud/version")!
     private static let downloadURL = URL(string: "https://dict.studio/Dict.dmg")!
 
