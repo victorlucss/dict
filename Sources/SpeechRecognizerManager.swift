@@ -118,8 +118,10 @@ class SpeechRecognizerManager {
                 let nsError = error as NSError
                 // 216 = request was cancelled (normal on stop)
                 if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 216 {
-                    // Task ended without a final result — deliver last partial (or empty to unblock UI)
-                    if !self.delivered {
+                    // Task ended without a final result — deliver last partial if we have one.
+                    // If empty, let the 3s timeout in stopListening() handle it so we don't
+                    // preempt a final result that may still arrive.
+                    if !self.delivered && !self.lastPartialText.isEmpty {
                         self.delivered = true
                         DispatchQueue.main.async {
                             self.onResult?(self.lastPartialText)
