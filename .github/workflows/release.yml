@@ -29,6 +29,14 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Run tests
+        if: steps.check_tag.outputs.exists == 'false'
+        run: swift test
+
+      - name: Run script tests
+        if: steps.check_tag.outputs.exists == 'false'
+        run: bash tests/test-build.sh
+
       - name: Build DMG
         if: steps.check_tag.outputs.exists == 'false'
         run: ./scripts/build.sh --dmg
