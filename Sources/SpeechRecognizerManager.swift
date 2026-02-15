@@ -14,6 +14,9 @@ class SpeechRecognizerManager {
     private var recognitionTask: SFSpeechRecognitionTask?
     private var lastPartialText: String = ""
     private var delivered = false
+    /// Monotonically increasing session counter; prevents stale callbacks
+    /// from old recognition tasks or timeouts from affecting the current session.
+    private var sessionID: UInt64 = 0
 
     private static func localeIdentifier(for code: String) -> String {
         switch code {
@@ -50,10 +53,12 @@ class SpeechRecognizerManager {
         recognitionTask = nil
         lastPartialText = ""
         delivered = false
+        sessionID &+= 1
+        let currentSession = sessionID
 
         let localeID = Self.localeIdentifier(for: Settings.shared.whisperLanguage)
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: localeID))
-        Log.info("Apple Speech locale: \(localeID)")
+        Log.info("Apple Speech locale: \(localeID) (session \(currentSession))")
 
         guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
             onError?("Speech recognizer not available for \(localeID).")
@@ -97,7 +102,7 @@ class SpeechRecognizerManager {
         }
 
         recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self = self, !self.delivered else { return }
+            guard let self = self, self.sessionID == currentSession, !self.delivered else { return }
 
             if let result = result {
                 let text = result.bestTranscription.formattedString
@@ -137,6 +142,7 @@ class SpeechRecognizerManager {
     }
 
     func stopListening() {
+        let currentSession = sessionID
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
@@ -144,7 +150,7 @@ class SpeechRecognizerManager {
         // Don't cancel recognitionTask — let it finish processing and deliver isFinal.
         // A 3s safety timeout ensures we don't hang forever.
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-            guard let self = self, !self.delivered else { return }
+            guard let self = self, self.sessionID == currentSession, !self.delivered else { return }
             self.delivered = true
             // Use last partial if available, otherwise deliver empty to unblock the UI
             self.onResult?(self.lastPartialText)

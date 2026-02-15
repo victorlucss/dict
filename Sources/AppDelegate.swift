@@ -250,6 +250,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startRecording() {
         guard !isRecording else { return }
+
+        if !AXIsProcessTrusted() {
+            let alert = NSAlert()
+            alert.messageText = "Accessibility Permission Required"
+            alert.informativeText = "Dict needs Accessibility access to paste text into apps.\n\nGo to System Settings > Privacy & Security > Accessibility and enable Dict."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Open System Settings")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn {
+                OnboardingWindow.openAccessibilitySettings()
+            }
+            return
+        }
+
         isRecording = true
         isCancelled = false
         Log.info("Recording started (engine: \(settings.sttEngine.rawValue))")
