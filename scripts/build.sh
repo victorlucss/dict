@@ -22,9 +22,11 @@ cp "$BUILD_DIR/release/Dict" "$APP_BUNDLE/Contents/MacOS/Dict"
 cp "$PROJECT_DIR/Resources/Info.plist" "$APP_BUNDLE/Contents/"
 cp "$PROJECT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 
-# Code-sign so macOS preserves permissions across updates
+# Code-sign the app bundle
+# For distribution: set CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+# For notarization: also set NOTARY_PROFILE="your-keychain-profile"
 SIGN_IDENTITY="${CODESIGN_IDENTITY:-Apple Development}"
-if codesign --force --sign "$SIGN_IDENTITY" --deep "$APP_BUNDLE" 2>/dev/null; then
+if codesign --force --options runtime --sign "$SIGN_IDENTITY" --deep "$APP_BUNDLE" 2>/dev/null; then
     echo "Signed with: $SIGN_IDENTITY"
 else
     echo "Warning: Code signing failed. Accessibility permissions will reset on each install."
@@ -51,6 +53,18 @@ if [[ "${1:-}" == "--dmg" ]]; then
     mkdir -p "$DMG_TMP"
     cp -R "$APP_BUNDLE" "$DMG_TMP/"
     ln -s /Applications "$DMG_TMP/Applications"
+
+    # Create "Fix Gatekeeper" helper script for unsigned builds
+    cat > "$DMG_TMP/Fix Gatekeeper.command" <<'SCRIPT'
+#!/bin/bash
+# Removes the macOS quarantine flag so Dict can open without the
+# "Apple could not verify" warning. Only needed for unsigned builds.
+echo "Removing quarantine flag from Dict..."
+xattr -cr /Applications/Dict.app
+echo "Done! You can now open Dict normally."
+SCRIPT
+    chmod +x "$DMG_TMP/Fix Gatekeeper.command"
+
     mkdir -p "$DMG_TMP/.background"
     cp "$BACKGROUND" "$DMG_TMP/.background/bg.png"
 
@@ -63,8 +77,10 @@ if [[ "${1:-}" == "--dmg" ]]; then
     rm -rf "$DMG_TMP"
 
     # Mount writable DMG and style via AppleScript
-    MOUNT_DIR=$(hdiutil attach -readwrite -noverify "$DMG_RW" | grep "/Volumes/" | sed 's/.*\/Volumes/\/Volumes/')
+    MOUNT_DIR=$(hdiutil attach -readwrite -noverify "$DMG_RW" | grep "/Volumes/" | sed 's/.*\/Volumes/\/Volumes/' | xargs)
     VOL_NAME=$(basename "$MOUNT_DIR")
+    echo "Mounted at: $MOUNT_DIR (volume: $VOL_NAME)"
+    sleep 2
 
     # Hide extension on Dict.app
     SetFile -a E "$MOUNT_DIR/Dict.app" 2>/dev/null || true
@@ -85,6 +101,7 @@ tell application "Finder"
         set background picture of opts to file ".background:bg.png"
         set position of item "Dict.app" of container window to {200, 200}
         set position of item "Applications" of container window to {600, 200}
+        set position of item "Fix Gatekeeper.command" of container window to {400, 310}
         close
         open
         update without registering applications
@@ -107,6 +124,24 @@ APPLESCRIPT
     hdiutil detach "$MOUNT_DIR"
     hdiutil convert "$DMG_RW" -format UDZO -o "$DMG_PATH"
     rm -f "$DMG_RW"
+
+    # Notarize if NOTARY_PROFILE is set
+    # Setup (one-time): xcrun notarytool store-credentials "dict-notary" \
+    #   --apple-id "your@email.com" --team-id "TEAMID" --password "app-specific-password"
+    # Then: NOTARY_PROFILE="dict-notary" ./scripts/build.sh --dmg
+    NOTARY_PROFILE="${NOTARY_PROFILE:-}"
+    if [[ -n "$NOTARY_PROFILE" ]]; then
+        echo "Notarizing DMG..."
+        xcrun notarytool submit "$DMG_PATH" \
+            --keychain-profile "$NOTARY_PROFILE" \
+            --wait
+        echo "Stapling notarization ticket..."
+        xcrun stapler staple "$DMG_PATH"
+        echo "Notarization complete."
+    else
+        echo "Skipping notarization (set NOTARY_PROFILE to enable)."
+    fi
+
     echo "DMG created at: $DMG_PATH"
 fi
 
