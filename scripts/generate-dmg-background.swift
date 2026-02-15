@@ -48,6 +48,27 @@ headPath.close()
 arrowColor.setFill()
 headPath.fill()
 
+// --- Instruction text at the bottom ---
+// "Fix Gatekeeper.command" is positioned at {400, 350} in Finder (top-down)
+// In image coords (bottom-up): y = 450 - 350 = 100, but text goes above the icon
+// Place instruction above the script icon, around y=350 from top → 100 from bottom
+let instructionFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+let instructionAttrs: [NSAttributedString.Key: Any] = [
+    .font: instructionFont,
+    .foregroundColor: NSColor.black.withAlphaComponent(0.4),
+]
+
+let line1 = "After dragging Dict to Applications," as NSString
+let line2 = "read the instructions above to finish setup." as NSString
+let line1Size = line1.size(withAttributes: instructionAttrs)
+let line2Size = line2.size(withAttributes: instructionAttrs)
+
+// Position centered horizontally, below the Fix Gatekeeper icon + its label
+// Script icon at y=310 from top, icon ~50px, label ~15px → bottom of label ≈375 from top
+// In image coords (bottom-up): 450 - 390 = 60
+line1.draw(at: NSPoint(x: (width - line1Size.width) / 2, y: 55), withAttributes: instructionAttrs)
+line2.draw(at: NSPoint(x: (width - line2Size.width) / 2, y: 55 - line2Size.height - 2), withAttributes: instructionAttrs)
+
 img.unlockFocus()
 
 // --- Save PNG ---
