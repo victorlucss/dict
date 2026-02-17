@@ -21,6 +21,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let maxRecordingDuration: TimeInterval = 15
     private let warningLeadTime: TimeInterval = 3
 
+    private var dictationAvailable = true
     private var preferencesWindow: PreferencesWindow?
     private var onboarding: OnboardingWindow?
 
@@ -127,6 +128,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         accessItem.isEnabled = !AXIsProcessTrusted()
         menu.addItem(accessItem)
 
+        if settings.sttEngine == .apple {
+            let dictationLabel = dictationAvailable ? "Dictation: Enabled" : "Enable Dictation..."
+            let dictItem = NSMenuItem(title: dictationLabel, action: #selector(openDictationSettings), keyEquivalent: "")
+            dictItem.target = self
+            dictItem.isEnabled = !dictationAvailable
+            menu.addItem(dictItem)
+        }
+
         let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "u")
         updateItem.target = self
         menu.addItem(updateItem)
@@ -218,6 +227,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appleSpeech.onPartialResult = { [weak self] text in
             self?.overlay.updateText(text)
         }
+        appleSpeech.onDictationDisabled = { [weak self] in
+            guard let self = self else { return }
+            self.dictationAvailable = false
+            Log.error("Dictation is disabled — Apple Speech cannot function.")
+            self.stopRecording()
+            self.stopPushToTalkMonitor()
+            DispatchQueue.main.async {
+                self.overlay.hide()
+                self.showDictationAlert()
+                self.rebuildMenu()
+            }
+        }
         appleSpeech.onError = { [weak self] error in
             Log.error("Apple Speech error: \(error)")
             self?.stopRecording()
@@ -261,6 +282,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if alert.runModal() == .alertFirstButtonReturn {
                 OnboardingWindow.openAccessibilitySettings()
             }
+            return
+        }
+
+        if settings.sttEngine == .apple && !dictationAvailable {
+            showDictationAlert()
             return
         }
 
@@ -445,6 +471,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openAccessibility() {
         OnboardingWindow.openAccessibilitySettings()
+    }
+
+    @objc private func openDictationSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func showDictationAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Dictation Not Enabled"
+        alert.informativeText = "Dict requires Dictation to be enabled for Apple Speech recognition.\n\nGo to System Settings > Keyboard > Dictation and turn it on."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            openDictationSettings()
+        }
+        // Reset so the user can retry after enabling
+        dictationAvailable = true
     }
 
     @objc private func openSnippets() {

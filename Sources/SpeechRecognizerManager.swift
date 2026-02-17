@@ -6,6 +6,7 @@ class SpeechRecognizerManager {
     var onResult: ((String) -> Void)?
     var onPartialResult: ((String) -> Void)?
     var onError: ((String) -> Void)?
+    var onDictationDisabled: (() -> Void)?
     var onAudioLevel: ((Float) -> Void)?
 
     private var speechRecognizer: SFSpeechRecognizer?
@@ -134,8 +135,15 @@ class SpeechRecognizerManager {
                     }
                     return
                 }
+                let msg = error.localizedDescription
+                if msg.contains("Dictation") || msg.contains("Siri") {
+                    DispatchQueue.main.async {
+                        self.onDictationDisabled?()
+                    }
+                    return
+                }
                 DispatchQueue.main.async {
-                    self.onError?(error.localizedDescription)
+                    self.onError?(msg)
                 }
             }
         }
