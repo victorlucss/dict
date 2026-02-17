@@ -33,7 +33,8 @@ cp "$PROJECT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 # For distribution: set CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 # For notarization: also set NOTARY_PROFILE="your-keychain-profile"
 SIGN_IDENTITY="${CODESIGN_IDENTITY:-Apple Development}"
-if codesign --force --options runtime --sign "$SIGN_IDENTITY" --deep "$APP_BUNDLE" 2>/dev/null; then
+ENTITLEMENTS="$PROJECT_DIR/Resources/Dict.entitlements"
+if codesign --force --options runtime --sign "$SIGN_IDENTITY" --entitlements "$ENTITLEMENTS" --deep "$APP_BUNDLE" 2>/dev/null; then
     echo "Signed with: $SIGN_IDENTITY"
 else
     echo "Warning: Code signing failed. Accessibility permissions will reset on each install."
