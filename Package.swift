@@ -21,6 +21,7 @@ let package = Package(
                 .linkedFramework("Carbon"),
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("Speech"),
+                .linkedFramework("CoreAudio"),
             ]
         ),
         .testTarget(

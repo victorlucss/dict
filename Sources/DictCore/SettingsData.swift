@@ -49,6 +49,7 @@ public struct SettingsData: Codable {
     public var privacyMode: Bool = false
     public var verboseOverlay: Bool = false
     public var overlayPosition: OverlayPosition = .top
+    public var selectedMicrophoneUID: String = ""
     public var onboardingDone: Bool = false
 
     public init() {}
@@ -72,6 +73,7 @@ public struct SettingsData: Codable {
         privacyMode = (try? c.decode(Bool.self, forKey: .privacyMode)) ?? defaults.privacyMode
         verboseOverlay = (try? c.decode(Bool.self, forKey: .verboseOverlay)) ?? defaults.verboseOverlay
         overlayPosition = (try? c.decode(OverlayPosition.self, forKey: .overlayPosition)) ?? defaults.overlayPosition
+        selectedMicrophoneUID = (try? c.decode(String.self, forKey: .selectedMicrophoneUID)) ?? defaults.selectedMicrophoneUID
         onboardingDone = (try? c.decode(Bool.self, forKey: .onboardingDone)) ?? defaults.onboardingDone
     }
 }

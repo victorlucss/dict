@@ -18,6 +18,7 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private var privacyModeSwitch: NSSwitch!
 
     // Speech controls
+    private var microphonePopUp: NSPopUpButton!
     private var enginePopUp: NSPopUpButton!
     private var whisperModelField: NSTextField!
     private var whisperBrowseButton: NSButton!
@@ -283,6 +284,15 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         let card = createCard()
         let stack = cardStack()
 
+        microphonePopUp = NSPopUpButton()
+        microphonePopUp.addItem(withTitle: "System Default")
+        microphonePopUp.lastItem?.representedObject = "" as String
+        for device in AudioDevices.listInputDevices() {
+            microphonePopUp.addItem(withTitle: device.name)
+            microphonePopUp.lastItem?.representedObject = device.uid
+        }
+        stack.addArrangedSubview(settingRow(label: "Microphone", control: microphonePopUp))
+
         enginePopUp = NSPopUpButton()
         enginePopUp.addItems(withTitles: ["Apple Speech", "Whisper"])
         enginePopUp.target = self
@@ -519,6 +529,13 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         languagePopUp.selectItem(at:
             Settings.supportedLanguages.firstIndex(where: { $0.code == settings.whisperLanguage }) ?? 0)
 
+        // Select matching microphone, or fall back to "System Default" (index 0)
+        let savedMicUID = settings.selectedMicrophoneUID
+        let micIndex = (0..<microphonePopUp.numberOfItems).first {
+            (microphonePopUp.item(at: $0)?.representedObject as? String) == savedMicUID
+        } ?? 0
+        microphonePopUp.selectItem(at: micIndex)
+
         enginePopUp.selectItem(at: settings.sttEngine == .apple ? 0 : 1)
         whisperModelField.stringValue = settings.whisperModelPath
         updateWhisperVisibility()
@@ -590,6 +607,7 @@ class PreferencesWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
 
     @objc private func saveClicked() {
         settings.hotkeyMode = hotkeyModePopUp.indexOfSelectedItem == 0 ? .toggle : .pushToTalk
+        settings.selectedMicrophoneUID = microphonePopUp.selectedItem?.representedObject as? String ?? ""
         settings.sttEngine = enginePopUp.indexOfSelectedItem == 0 ? .apple : .whisper
         if let code = languagePopUp.selectedItem?.representedObject as? String {
             settings.whisperLanguage = code

@@ -18,6 +18,11 @@ class WhisperSTT {
 
         buffers = []
 
+        let selectedMic = Settings.shared.selectedMicrophoneUID
+        if !selectedMic.isEmpty {
+            AudioDevices.setInputDevice(uid: selectedMic, on: audioEngine)
+        }
+
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
         Log.info("[Whisper] Mic format: \(inputFormat)")

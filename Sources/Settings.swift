@@ -110,6 +110,11 @@ class Settings {
         set { data.overlayPosition = newValue; save() }
     }
 
+    var selectedMicrophoneUID: String {
+        get { data.selectedMicrophoneUID }
+        set { data.selectedMicrophoneUID = newValue; save() }
+    }
+
     var onboardingDone: Bool {
         get { data.onboardingDone }
         set { data.onboardingDone = newValue; save() }
