@@ -1,0 +1,51 @@
+[package]
+name = "dict"
+version = "0.4.0"
+description = "Voice to text via global hotkey — cross-platform"
+edition = "2021"
+
+[lib]
+name = "dict_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dict"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+cpal = "0.15"
+rubato = "0.16"
+hound = "3.5"
+arboard = "3"
+enigo = { version = "0.3", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.26"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSProcessInfo"] }
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

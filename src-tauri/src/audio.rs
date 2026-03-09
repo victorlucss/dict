@@ -1,0 +1,285 @@
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::{Device, Stream};
+use hound::{SampleFormat, WavSpec, WavWriter};
+use rubato::{FftFixedIn, Resampler};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+/// Audio device info returned to the frontend
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AudioDeviceInfo {
+    pub id: String,
+    pub name: String,
+}
+
+/// Wrapper to make cpal::Stream Send+Sync (safe because we protect with Mutex)
+struct SendStream(Option<Stream>);
+// SAFETY: Stream is only accessed through a Mutex<AudioCapture> which serializes access.
+unsafe impl Send for SendStream {}
+unsafe impl Sync for SendStream {}
+
+/// Lists available audio input devices
+pub fn list_audio_devices() -> Vec<AudioDeviceInfo> {
+    let host = cpal::default_host();
+    let mut devices = Vec::new();
+
+    devices.push(AudioDeviceInfo {
+        id: "default".to_string(),
+        name: "System Default".to_string(),
+    });
+
+    if let Ok(input_devices) = host.input_devices() {
+        for device in input_devices {
+            if let Ok(name) = device.name() {
+                devices.push(AudioDeviceInfo {
+                    id: name.clone(),
+                    name,
+                });
+            }
+        }
+    }
+
+    devices
+}
+
+/// Get the input device by name, or the default
+fn get_input_device(device_id: Option<&str>) -> Option<Device> {
+    let host = cpal::default_host();
+
+    match device_id {
+        Some(id) if id != "default" => {
+            if let Ok(devices) = host.input_devices() {
+                for device in devices {
+                    if let Ok(name) = device.name() {
+                        if name == id {
+                            return Some(device);
+                        }
+                    }
+                }
+            }
+            // Fallback to default if specified device not found
+            host.default_input_device()
+        }
+        _ => host.default_input_device(),
+    }
+}
+
+/// Shared state for audio recording
+struct RecordingState {
+    samples: Vec<f32>,
+    sample_rate: u32,
+    channels: u16,
+}
+
+/// Active audio capture session
+pub struct AudioCapture {
+    stream: SendStream,
+    state: Arc<Mutex<RecordingState>>,
+    level_callback: Arc<Mutex<Option<Box<dyn Fn(f32) + Send + 'static>>>>,
+}
+
+impl AudioCapture {
+    pub fn new() -> Self {
+        Self {
+            stream: SendStream(None),
+            state: Arc::new(Mutex::new(RecordingState {
+                samples: Vec::new(),
+                sample_rate: 44100,
+                channels: 1,
+            })),
+            level_callback: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn set_level_callback<F: Fn(f32) + Send + 'static>(&self, callback: F) {
+        *self.level_callback.lock().unwrap() = Some(Box::new(callback));
+    }
+
+    /// Start recording from the microphone
+    pub fn start(&mut self, device_id: Option<&str>) -> Result<(), String> {
+        let device = get_input_device(device_id).ok_or("No audio input device found")?;
+        let config = device
+            .default_input_config()
+            .map_err(|e| format!("Failed to get input config: {}", e))?;
+
+        let sample_rate = config.sample_rate().0;
+        let channels = config.channels();
+
+        tracing::info!(
+            "Audio capture: {} @ {}Hz, {} ch",
+            device.name().unwrap_or_default(),
+            sample_rate,
+            channels
+        );
+
+        {
+            let mut s = self.state.lock().unwrap();
+            s.samples.clear();
+            s.sample_rate = sample_rate;
+            s.channels = channels;
+        }
+
+        let state = self.state.clone();
+        let level_cb = self.level_callback.clone();
+
+        let stream = device
+            .build_input_stream(
+                &config.into(),
+                move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    // Collect samples (mono-mix if multi-channel)
+                    let ch = channels as usize;
+                    let mono_samples: Vec<f32> = if ch == 1 {
+                        data.to_vec()
+                    } else {
+                        data.chunks(ch)
+                            .map(|frame| frame.iter().sum::<f32>() / ch as f32)
+                            .collect()
+                    };
+
+                    // RMS audio level calculation (match Swift: sqrt(rms * 20.0))
+                    let sum: f32 = mono_samples.iter().map(|s| s * s).sum();
+                    let rms = (sum / mono_samples.len().max(1) as f32).sqrt();
+                    let normalized = (rms * 20.0).min(1.0).sqrt().min(1.0);
+
+                    if let Ok(cb) = level_cb.lock() {
+                        if let Some(ref callback) = *cb {
+                            callback(normalized);
+                        }
+                    }
+
+                    if let Ok(mut s) = state.lock() {
+                        s.samples.extend_from_slice(&mono_samples);
+                    }
+                },
+                move |err| {
+                    tracing::error!("Audio capture error: {}", err);
+                },
+                None,
+            )
+            .map_err(|e| format!("Failed to build input stream: {}", e))?;
+
+        stream
+            .play()
+            .map_err(|e| format!("Failed to start stream: {}", e))?;
+
+        self.stream = SendStream(Some(stream));
+        tracing::info!("Audio capture started");
+        Ok(())
+    }
+
+    /// Stop recording and return the WAV file path
+    pub fn stop(&mut self) -> Result<PathBuf, String> {
+        self.stream = SendStream(None); // Drop the stream to stop recording
+        tracing::info!("Audio capture stopped");
+
+        let (samples, source_rate, _channels) = {
+            let s = self.state.lock().unwrap();
+            (s.samples.clone(), s.sample_rate, s.channels)
+        };
+
+        if samples.is_empty() {
+            return Err("No audio captured".to_string());
+        }
+
+        tracing::info!(
+            "Captured {} samples at {}Hz",
+            samples.len(),
+            source_rate
+        );
+
+        // Resample to 16kHz if needed
+        let resampled = if source_rate != 16000 {
+            resample(&samples, source_rate, 16000)?
+        } else {
+            samples
+        };
+
+        // Write WAV file
+        let temp_dir = std::env::temp_dir();
+        let filename = format!("dict_{}.wav", uuid::Uuid::new_v4());
+        let wav_path = temp_dir.join(filename);
+
+        write_wav(&resampled, &wav_path)?;
+
+        tracing::info!(
+            "Wrote WAV: {} ({} frames)",
+            wav_path.display(),
+            resampled.len()
+        );
+
+        Ok(wav_path)
+    }
+}
+
+/// Resample audio from source_rate to target_rate using rubato
+fn resample(samples: &[f32], source_rate: u32, target_rate: u32) -> Result<Vec<f32>, String> {
+    let mut resampler = FftFixedIn::<f32>::new(
+        source_rate as usize,
+        target_rate as usize,
+        1024,
+        1, // sub-chunks
+        1, // channels
+    )
+    .map_err(|e| format!("Failed to create resampler: {}", e))?;
+
+    let mut output = Vec::new();
+    let chunk_size = resampler.input_frames_next();
+
+    let mut pos = 0;
+    while pos < samples.len() {
+        let end = (pos + chunk_size).min(samples.len());
+        let mut chunk = samples[pos..end].to_vec();
+
+        // Pad last chunk if needed
+        if chunk.len() < chunk_size {
+            chunk.resize(chunk_size, 0.0);
+        }
+
+        let input = vec![chunk];
+        let result = resampler
+            .process(&input, None)
+            .map_err(|e| format!("Resampling error: {}", e))?;
+
+        if let Some(channel) = result.first() {
+            output.extend_from_slice(channel);
+        }
+
+        pos += chunk_size;
+    }
+
+    tracing::info!(
+        "Resampled {} → {} frames ({}Hz → {}Hz)",
+        samples.len(),
+        output.len(),
+        source_rate,
+        target_rate
+    );
+
+    Ok(output)
+}
+
+/// Write samples to a 16kHz, 16-bit, mono WAV file
+fn write_wav(samples: &[f32], path: &PathBuf) -> Result<(), String> {
+    let spec = WavSpec {
+        channels: 1,
+        sample_rate: 16000,
+        bits_per_sample: 16,
+        sample_format: SampleFormat::Int,
+    };
+
+    let mut writer =
+        WavWriter::create(path, spec).map_err(|e| format!("Failed to create WAV: {}", e))?;
+
+    for &sample in samples {
+        let int_sample = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
+        writer
+            .write_sample(int_sample)
+            .map_err(|e| format!("Failed to write sample: {}", e))?;
+    }
+
+    writer
+        .finalize()
+        .map_err(|e| format!("Failed to finalize WAV: {}", e))?;
+
+    Ok(())
+}
