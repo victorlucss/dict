@@ -1,0 +1,54 @@
+{
+  "productName": "Dict",
+  "version": "0.4.0",
+  "identifier": "com.dict.dictation",
+  "build": {
+    "frontendDist": "../src",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "withGlobalTauri": true,
+    "windows": [],
+    "trayIcon": {
+      "id": "main-tray",
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": false
+    },
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src http://localhost:* https://*"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "14.0",
+      "entitlements": "Entitlements.plist",
+      "frameworks": [],
+      "exceptionDomain": ""
+    },
+    "linux": {
+      "deb": {
+        "depends": ["libasound2-dev"]
+      }
+    },
+    "windows": {
+      "wix": {}
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}

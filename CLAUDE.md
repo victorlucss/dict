@@ -4,103 +4,129 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Dict?
 
-Dict is a macOS menu-bar app that converts voice to text via a global hotkey (Option+Space). It supports two STT backends (Apple Speech, Whisper) with optional LLM post-processing, and pastes the result into whatever app has focus.
+Dict is a cross-platform (macOS, Linux, Windows) menu-bar/tray app that converts voice to text via a global hotkey. It supports two STT backends (Apple Speech on macOS, Whisper on all platforms) with optional LLM post-processing, and pastes the result into whatever app has focus.
+
+Built with **Rust + Tauri 2.0** for the backend and vanilla HTML/CSS/JS for the frontend.
 
 ## Build Commands
 
 ```bash
-# Debug build
-swift build
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Release build + .app bundle
-./scripts/build.sh
+# Install Tauri CLI
+cargo install tauri-cli --version "^2"
 
-# Release build + .app bundle + DMG
-./scripts/build.sh --dmg
+# Debug build (check only)
+cd src-tauri && cargo check
 
-# Release build + signed & notarized DMG
-CODESIGN_IDENTITY="Developer ID Application: Victor Lucas da Silva Monteiro (9J2K2AFDLJ)" NOTARY_PROFILE="dict-notary" ./scripts/build.sh --dmg
+# Run tests
+cd src-tauri && cargo test
 
-# Run the app
-open Dict.app
+# Dev mode (hot-reload)
+cd src-tauri && cargo tauri dev
+
+# Release build (creates platform-specific bundle)
+cd src-tauri && cargo tauri build
 ```
 
-There are no tests or linter configured yet. The project uses Swift Package Manager with no external dependencies — only macOS system frameworks (AppKit, Carbon, AVFoundation, Speech).
+Tests: 4 unit tests in `src-tauri/src/settings.rs` (run via `cargo test`). No linter configured.
 
 ## Releasing
 
-Versioning follows semver. The version lives in `Resources/Info.plist` (`CFBundleShortVersionString` and `CFBundleVersion`).
+Versioning follows semver. The version lives in `src-tauri/tauri.conf.json` (the `version` field).
 
 ### Automated (GitHub Actions)
 
-1. Bump the version in `Resources/Info.plist` (both `CFBundleShortVersionString` and `CFBundleVersion`)
+1. Bump the version in `src-tauri/tauri.conf.json`
 2. Commit and push to `main`
 3. The GitHub Actions pipeline (`.github/workflows/release.yml`) automatically:
-   - Builds the DMG on a macOS 14 runner
-   - Creates a GitHub Release tagged `vX.Y.Z` with the DMG attached
+   - Builds for macOS (aarch64 + x86_64), Linux (x86_64), and Windows (x86_64)
+   - Creates a GitHub Release tagged `vX.Y.Z` with all platform installers
    - Skips if a tag for that version already exists
 
-### Manual (local signed & notarized DMG)
+### Manual (local macOS build)
 
-1. Bump the version in `Resources/Info.plist` (both `CFBundleShortVersionString` and `CFBundleVersion`)
-2. Build the signed and notarized DMG:
-   ```bash
-   CODESIGN_IDENTITY="Developer ID Application: Victor Lucas da Silva Monteiro (9J2K2AFDLJ)" NOTARY_PROFILE="dict-notary" ./scripts/build.sh --dmg
-   ```
-3. The DMG is output to `Dict.dmg` in the project root, ready for distribution
-4. Commit and push to `main`
-
-The notary profile `dict-notary` is stored in the local Keychain. To recreate it on a new machine:
 ```bash
-xcrun notarytool store-credentials "dict-notary" \
-  --apple-id "YOUR_APPLE_ID" \
-  --team-id "9J2K2AFDLJ" \
-  --password "APP_SPECIFIC_PASSWORD"
+cd src-tauri && cargo tauri build
+# Output: src-tauri/target/release/bundle/dmg/Dict_X.Y.Z_aarch64.dmg
 ```
-
-Without notarization, macOS Gatekeeper will block the app with "Apple could not verify" — signing alone is not enough.
 
 ## Architecture
 
-**AppDelegate** is the central orchestrator. It owns all components and wires them together:
+The app is structured as a Tauri 2.0 application with a Rust backend and HTML/JS frontend.
+
+### Backend (src-tauri/src/)
+
+**lib.rs** is the central orchestrator. It manages state, registers Tauri commands, and wires everything together:
 
 ```
-HotkeyManager (Option+Space, Carbon API)
-    → toggleRecording()
-        → SpeechRecognizerManager (Apple on-device STT)
-          OR WhisperSTT (records WAV → runs whisper-cli subprocess)
-            → LLMProcessor (optional, OpenAI-compatible API cleanup, accuracy level)
-                → TextInjector (clipboard + AppleScript Cmd+V paste)
+Global Hotkey (tauri-plugin-global-shortcut, Alt+Space / Ctrl+Alt+Space)
+    → start_recording() / stop_recording()
+        → Apple Speech (macOS: Swift FFI bridge via apple_speech.rs)
+          OR Whisper (audio.rs capture → whisper.rs CLI subprocess)
+            → LLM Processor (llm.rs: OpenAI/Anthropic/Ollama/LM Studio)
+                → Text Injector (text_injector.rs: arboard clipboard + enigo paste)
 
-RecordingOverlay (floating HUD with audio level bars, 15s limit with red warning border)
-Settings (singleton, persisted to ~/.config/dict/config.json)
-PreferencesWindow (sidebar + content pane layout, buffered UI — changes only apply on Save)
-UpdateChecker (compares semver against remote, only prompts when remote > current)
+System Tray (Tauri tray-icon: mode toggle, preferences, quit)
+Recording Overlay (overlay window: animated dots, audio level)
+Settings (settings.rs: serde JSON at ~/.config/dict/config.json)
+Preferences Window (preferences/: sidebar + 5 sections, buffered save)
+Update Checker (update_checker.rs: semver comparison against remote)
 ```
 
-**Key design decisions:**
-- Carbon `RegisterEventHotKey` for the global hotkey — no Accessibility permission needed (unlike CGEvent taps)
-- Whisper runs as a CLI subprocess (`whisper-cli`) rather than linked C++ library — simpler build, user installs via Homebrew
-- Text injection uses AppleScript `System Events` keystroke as primary method, CGEvent as fallback — both require Accessibility permission
-- `LSUIElement = true` in Info.plist — menu bar only, no dock icon
-- Config lives at `~/.config/dict/config.json`, auto-created with defaults on first access
-- Settings uses a custom `init(from:)` decoder so missing keys fall back to defaults — adding new settings won't break existing config files
-- Preferences window uses sidebar + content pane layout (5 sections: General, Speech, LLM, Overlay, Files), buffers all changes until Save
-- Push-to-talk mode guards against Carbon key-repeat events to avoid recreating the NSEvent monitor mid-hold
-- Recording has a 15-second hard limit with a red border warning 3 seconds before cutoff
-- LLM correction level (1–5 slider) controls how aggressively the LLM rewrites transcriptions — from minimal punctuation fixes to full rewriting
-- Update checker does proper semver comparison; falls back to reading Info.plist from disk when Bundle.main is unavailable
+### Frontend (src/)
+
+Vanilla HTML/CSS/JS with no build step:
+- `overlay/` — Recording HUD with animated dots and audio level visualization
+- `preferences/` — Settings UI with 5 sections (General, Speech, LLM, Overlay, Files)
+- `onboarding/` — First-launch setup wizard (platform-aware steps)
+
+### Key Modules
+
+| Module | Purpose |
+|--------|---------|
+| `lib.rs` | App orchestration, state machine, Tauri commands, tray menu |
+| `settings.rs` | SettingsData, persistence, custom dictionary, snippets, voice commands, history |
+| `audio.rs` | cpal microphone capture, rubato resampling to 16kHz, hound WAV writing |
+| `apple_speech.rs` | macOS-only Swift FFI bridge to SFSpeechRecognizer |
+| `whisper.rs` | whisper-cli binary discovery and subprocess transcription |
+| `llm.rs` | LLM post-processing (4 providers, correction levels 1-5) |
+| `text_injector.rs` | Clipboard paste via arboard + enigo, key combo simulation |
+| `hotkey.rs` | Hotkey defaults and debounce state |
+| `frontmost_app.rs` | Platform-specific frontmost app detection |
+| `update_checker.rs` | Remote version check with semver comparison |
+| `logging.rs` | tracing-subscriber with file + stdout |
+
+### Swift Bridge (macOS only)
+
+`src-tauri/swift-bridge/DictSpeechBridge.swift` provides Apple Speech recognition via C FFI. It's compiled to a static library by `build.rs` and linked automatically. The bridge exposes:
+- `dict_speech_start(language)` — Start streaming recognition
+- `dict_speech_stop()` — Stop with 3s timeout for final result
+- `dict_speech_cancel()` — Cancel immediately
+- `dict_speech_set_callbacks(...)` — Register result/level/error callbacks
+
+### Key Design Decisions
+
+- Tauri 2.0 for cross-platform (macOS, Linux, Windows) with a single Rust codebase
+- Apple Speech available only on macOS via Swift static library FFI bridge
+- Whisper runs as a CLI subprocess (`whisper-cli`) on all platforms
+- `tauri-plugin-global-shortcut` for hotkeys (Alt+Space on macOS, Ctrl+Alt+Space elsewhere)
+- Text injection uses `arboard` (clipboard) + `enigo` (key simulation) — cross-platform
+- `macOSPrivateApi: true` in tauri.conf.json + `LSUIElement` for menu-bar-only mode
+- Config at `~/.config/dict/` (macOS/Linux) or `%APPDATA%/dict/` (Windows)
+- Settings uses serde with `#[serde(default)]` so missing keys fall back to defaults
+- Push-to-talk mode uses hotkey press/release events
+- LLM correction level (1–5) controls rewriting aggressiveness
 
 ## Supported Languages
 
-Currently English and Brazilian Portuguese only. The language setting affects both Apple Speech (locale) and Whisper (`-l` flag). To add a new language:
-1. Add an entry to `Settings.supportedLanguages`
-2. Add a case in `SpeechRecognizerManager.localeIdentifier(for:)` to map the code to an Apple locale (e.g. `"pt"` → `"pt-BR"`)
+Currently English and Brazilian Portuguese. The `whisper_language` setting affects both Apple Speech (locale mapping in Swift bridge) and Whisper (`-l` flag).
 
 ## Runtime Requirements
 
-- macOS 14+
-- Microphone + Speech Recognition permissions (prompted automatically)
-- Accessibility permission (for text pasting — must be granted manually in System Settings)
+- **macOS 14+** / **Linux** (with GTK3, WebKitGTK) / **Windows 10+**
+- Microphone permission (prompted automatically)
+- Accessibility permission on macOS (for text pasting — granted manually in System Settings)
 - `brew install whisper-cpp` + a GGML model file if using Whisper engine
 - An OpenAI-compatible API endpoint if LLM cleanup is enabled

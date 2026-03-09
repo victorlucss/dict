@@ -7,3 +7,8 @@ xcuserdata/
 DerivedData/
 .DS_Store
 .dmg-staging/
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/swift-bridge/lib/
+*.a

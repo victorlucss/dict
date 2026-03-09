@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dict Setup</title>
+    <link rel="stylesheet" href="onboarding.css">
+</head>
+<body>
+    <div class="wizard">
+        <div class="wizard-icon" id="stepIcon">🎙</div>
+        <h1 id="stepTitle">Welcome to Dict</h1>
+        <p id="stepDescription">Dict converts your voice to text using a global hotkey.<br>Press Option+Space anywhere to start dictating.</p>
+        <div class="wizard-actions">
+            <button id="primaryBtn" class="btn-primary">Get Started</button>
+            <button id="secondaryBtn" class="btn-secondary" style="display:none;">Use Whisper</button>
+        </div>
+        <div id="stepIndicator" class="step-indicator">1 of 5</div>
+    </div>
+    <script src="onboarding.js"></script>
+</body>
+</html>

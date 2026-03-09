@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dict Preferences</title>
+    <link rel="stylesheet" href="preferences.css">
+</head>
+<body>
+    <div class="prefs-container">
+        <nav class="sidebar">
+            <button class="sidebar-btn active" data-section="general">
+                <span class="icon">⚙</span> General
+            </button>
+            <button class="sidebar-btn" data-section="speech">
+                <span class="icon">🎙</span> Speech
+            </button>
+            <button class="sidebar-btn" data-section="llm">
+                <span class="icon">🧠</span> LLM
+            </button>
+            <button class="sidebar-btn" data-section="overlay">
+                <span class="icon">▢</span> Overlay
+            </button>
+            <button class="sidebar-btn" data-section="files">
+                <span class="icon">📁</span> Files
+            </button>
+        </nav>
+
+        <main class="content">
+            <h1 id="section-title">General</h1>
+
+            <!-- General Section -->
+            <div class="section" id="section-general">
+                <div class="card">
+                    <div class="setting-row">
+                        <label>Hotkey Mode</label>
+                        <select id="hotkeyMode">
+                            <option value="toggle">Toggle (press to start/stop)</option>
+                            <option value="pushToTalk">Push to Talk (hold to record)</option>
+                        </select>
+                    </div>
+                    <div class="setting-row">
+                        <label>Language</label>
+                        <select id="language">
+                            <option value="en">English</option>
+                            <option value="pt">Português (Brasil)</option>
+                        </select>
+                    </div>
+                    <div class="setting-row">
+                        <label>Flow Mode</label>
+                        <div class="toggle-group">
+                            <input type="checkbox" id="flowMode" class="toggle">
+                            <span class="hint">Auto-press Return after pasting</span>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <label>Code Mode</label>
+                        <input type="checkbox" id="codeMode" class="toggle">
+                    </div>
+                    <div class="setting-row">
+                        <label>Privacy Mode</label>
+                        <input type="checkbox" id="privacyMode" class="toggle">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Speech Section -->
+            <div class="section hidden" id="section-speech">
+                <div class="card">
+                    <div class="setting-row">
+                        <label>STT Engine</label>
+                        <select id="sttEngine">
+                            <option value="apple">Apple Speech</option>
+                            <option value="whisper">Whisper</option>
+                        </select>
+                    </div>
+                    <div class="setting-row" id="whisperModelRow">
+                        <label>Whisper Model</label>
+                        <div class="file-row">
+                            <input type="text" id="whisperModelPath" placeholder="/path/to/ggml-model.bin">
+                            <button id="browseModel" class="btn-secondary">Browse...</button>
+                        </div>
+                    </div>
+                    <div class="setting-row" id="micDeviceRow">
+                        <label>Microphone</label>
+                        <select id="audioDevice">
+                            <option value="default">System Default</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LLM Section -->
+            <div class="section hidden" id="section-llm">
+                <div class="card">
+                    <div class="setting-row">
+                        <label>LLM Enabled</label>
+                        <input type="checkbox" id="llmEnabled" class="toggle">
+                    </div>
+                    <div class="setting-row">
+                        <label>Correction Level</label>
+                        <div class="slider-group">
+                            <input type="range" id="llmAccuracy" min="1" max="5" step="1" value="3">
+                            <span id="accuracyLabel">Balanced</span>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <label>Provider</label>
+                        <select id="llmProvider">
+                            <option value="openai">OpenAI</option>
+                            <option value="anthropic">Anthropic</option>
+                            <option value="ollama">Ollama</option>
+                            <option value="lmstudio">LM Studio</option>
+                        </select>
+                    </div>
+                    <div class="setting-row">
+                        <label>Model</label>
+                        <input type="text" id="llmModel" placeholder="llama3.2">
+                    </div>
+                    <div class="setting-row" id="endpointRow">
+                        <label>Endpoint</label>
+                        <input type="text" id="llmEndpoint" placeholder="http://localhost:11434/v1/chat/completions" disabled>
+                    </div>
+                    <div class="setting-row" id="apiKeyRow">
+                        <label>API Key</label>
+                        <input type="password" id="llmApiKey" placeholder="sk-...">
+                    </div>
+                    <div class="setting-column">
+                        <label>System Prompt</label>
+                        <textarea id="llmPrompt" rows="6"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Overlay Section -->
+            <div class="section hidden" id="section-overlay">
+                <div class="card">
+                    <div class="setting-row">
+                        <label>Verbose Overlay</label>
+                        <input type="checkbox" id="verboseOverlay" class="toggle">
+                    </div>
+                    <div class="setting-row">
+                        <label>Overlay Position</label>
+                        <select id="overlayPosition">
+                            <option value="top">Top</option>
+                            <option value="bottom">Bottom</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Files Section -->
+            <div class="section hidden" id="section-files">
+                <div class="card">
+                    <button class="btn-secondary" id="editDictionary">Edit Dictionary...</button>
+                    <button class="btn-secondary" id="editSnippets">Edit Snippets...</button>
+                    <button class="btn-secondary" id="editCommands">Edit Commands...</button>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button id="saveBtn" class="btn-primary">Save</button>
+            </div>
+        </main>
+    </div>
+    <script src="preferences.js"></script>
+</body>
+</html>
