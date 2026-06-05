@@ -23,6 +23,7 @@ pub enum OverlayPosition {
 pub enum LLMProvider {
     Openai,
     Anthropic,
+    Openrouter,
     Ollama,
     Lmstudio,
 }
@@ -50,6 +51,8 @@ pub struct SettingsData {
     pub llm_provider: LLMProvider,
     #[serde(default = "default_llm_prompt")]
     pub llm_prompt: String,
+    #[serde(default = "default_llm_tone")]
+    pub llm_tone: String,
     #[serde(default = "default_llm_accuracy")]
     pub llm_accuracy: i32,
     #[serde(default)]
@@ -66,12 +69,18 @@ pub struct SettingsData {
     pub onboarding_done: bool,
     #[serde(default)]
     pub audio_input_device: Option<String>,
+    #[serde(default = "default_hotkey")]
+    pub hotkey: String,
 }
 
 // ─── Default value functions ────────────────────────────
 
 fn default_hotkey_mode() -> HotkeyMode {
     HotkeyMode::PushToTalk
+}
+
+fn default_hotkey() -> String {
+    crate::hotkey::default_hotkey().to_string()
 }
 
 fn default_whisper_language() -> String {
@@ -103,6 +112,10 @@ fn default_llm_prompt() -> String {
         .to_string()
 }
 
+fn default_llm_tone() -> String {
+    "formal".to_string()
+}
+
 fn default_llm_accuracy() -> i32 {
     3
 }
@@ -123,6 +136,7 @@ impl Default for SettingsData {
             llm_api_key: String::new(),
             llm_provider: default_llm_provider(),
             llm_prompt: default_llm_prompt(),
+            llm_tone: default_llm_tone(),
             llm_accuracy: default_llm_accuracy(),
             flow_mode: false,
             code_mode: false,
@@ -131,6 +145,7 @@ impl Default for SettingsData {
             overlay_position: default_overlay_position(),
             onboarding_done: false,
             audio_input_device: None,
+            hotkey: default_hotkey(),
         }
     }
 }

@@ -7,35 +7,56 @@
     <link rel="stylesheet" href="preferences.css">
 </head>
 <body>
+    <div class="drag-region" data-tauri-drag-region></div>
     <div class="prefs-container">
-        <nav class="sidebar">
-            <button class="sidebar-btn active" data-section="general">
-                <span class="icon">⚙</span> General
-            </button>
-            <button class="sidebar-btn" data-section="speech">
-                <span class="icon">🎙</span> Speech
-            </button>
-            <button class="sidebar-btn" data-section="llm">
-                <span class="icon">🧠</span> LLM
-            </button>
-            <button class="sidebar-btn" data-section="overlay">
-                <span class="icon">▢</span> Overlay
-            </button>
-            <button class="sidebar-btn" data-section="history">
-                <span class="icon">🕘</span> History
-            </button>
-            <button class="sidebar-btn" data-section="dictionary">
-                <span class="icon">📖</span> Dictionary
-            </button>
-            <button class="sidebar-btn" data-section="snippets">
-                <span class="icon">✂️</span> Snippets
-            </button>
-            <button class="sidebar-btn" data-section="commands">
-                <span class="icon">⌨️</span> Commands
-            </button>
-            <button class="sidebar-btn" data-section="files">
-                <span class="icon">📁</span> Files
-            </button>
+        <nav class="sidebar" data-tauri-drag-region>
+            <div class="nav-group">
+                <div class="nav-group-title">Dictation</div>
+                <button class="sidebar-btn active" data-section="general" data-title="General">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    </span> General
+                </button>
+                <button class="sidebar-btn" data-section="speech" data-title="Speech">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+                    </span> Speech
+                </button>
+                <button class="sidebar-btn" data-section="llm" data-title="LLM">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M5 12H1M23 12h-4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/><circle cx="12" cy="12" r="3"/></svg>
+                    </span> LLM
+                </button>
+                <button class="sidebar-btn" data-section="overlay" data-title="Overlay">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8h20"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="9" y1="6" x2="9.01" y2="6"/></svg>
+                    </span> Overlay
+                </button>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">Data</div>
+                <button class="sidebar-btn" data-section="history" data-title="History">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+                    </span> History
+                </button>
+                <button class="sidebar-btn" data-section="dictionary" data-title="Dictionary">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                    </span> Dictionary
+                </button>
+                <button class="sidebar-btn" data-section="snippets" data-title="Snippets">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                    </span> Snippets
+                </button>
+                <button class="sidebar-btn" data-section="commands" data-title="Voice Commands">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>
+                    </span> Commands
+                </button>
+            </div>
         </nav>
 
         <main class="content">
@@ -45,33 +66,68 @@
             <div class="section" id="section-general">
                 <div class="card">
                     <div class="setting-row">
-                        <label>Hotkey Mode</label>
-                        <select id="hotkeyMode">
-                            <option value="toggle">Toggle (press to start/stop)</option>
-                            <option value="pushToTalk">Push to Talk (hold to record)</option>
-                        </select>
-                    </div>
-                    <div class="setting-row">
-                        <label>Language</label>
-                        <select id="language">
-                            <option value="en">English</option>
-                            <option value="pt">Português (Brasil)</option>
-                        </select>
-                    </div>
-                    <div class="setting-row">
-                        <label>Flow Mode</label>
-                        <div class="toggle-group">
-                            <input type="checkbox" id="flowMode" class="toggle">
-                            <span class="hint">Auto-press Return after pasting</span>
+                        <div class="setting-info">
+                            <div class="setting-title">Hotkey</div>
+                            <div class="setting-desc">The global shortcut that starts and stops dictation.</div>
+                        </div>
+                        <div class="setting-control">
+                            <button type="button" id="hotkeyRecorder" class="hotkey-recorder">
+                                <span id="hotkeyDisplay">⌥ Space</span>
+                            </button>
+                            <div class="control-error hidden" id="hotkeyError"></div>
                         </div>
                     </div>
                     <div class="setting-row">
-                        <label>Code Mode</label>
-                        <input type="checkbox" id="codeMode" class="toggle">
+                        <div class="setting-info">
+                            <div class="setting-title">Hotkey Mode</div>
+                            <div class="setting-desc">Toggle starts on one press and stops on the next. Push to talk records only while you hold the shortcut.</div>
+                        </div>
+                        <div class="setting-control">
+                            <select id="hotkeyMode">
+                                <option value="toggle" data-desc="Press once to start, again to stop">Toggle</option>
+                                <option value="pushToTalk" data-desc="Hold to record, release to stop">Push to Talk</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="setting-row">
-                        <label>Privacy Mode</label>
-                        <input type="checkbox" id="privacyMode" class="toggle">
+                        <div class="setting-info">
+                            <div class="setting-title">Language</div>
+                            <div class="setting-desc">Spoken language for transcription. Auto-detect lets Whisper identify it from your voice.</div>
+                        </div>
+                        <div class="setting-control">
+                            <select id="language">
+                                <option value="auto" data-desc="Detects the language from your voice">Auto-detect</option>
+                                <option value="en" data-desc="English">English</option>
+                                <option value="pt" data-desc="Brazilian Portuguese">Português (Brasil)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">Flow Mode</div>
+                            <div class="setting-desc">Automatically press Return after pasting, so dictated messages send themselves.</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="checkbox" id="flowMode" class="toggle">
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">Code Mode</div>
+                            <div class="setting-desc">Tunes formatting for code — preserves symbols, casing, and inline syntax.</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="checkbox" id="codeMode" class="toggle">
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">Privacy Mode</div>
+                            <div class="setting-desc">Never sends transcriptions to cloud LLMs and stops saving history to disk.</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="checkbox" id="privacyMode" class="toggle">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -79,18 +135,43 @@
             <!-- Speech Section -->
             <div class="section hidden" id="section-speech">
                 <div class="card">
-                    <div class="setting-row" id="whisperModelRow">
-                        <label>Whisper Model</label>
-                        <div class="file-row">
-                            <input type="text" id="whisperModelPath" placeholder="/path/to/ggml-model.bin">
-                            <button id="browseModel" class="btn-secondary">Browse...</button>
+                    <div class="setting-row setting-row-stacked" id="whisperModelRow">
+                        <div class="setting-info">
+                            <div class="setting-title">Whisper Model</div>
+                            <div class="setting-desc">The GGML model used for transcription. Larger models are more accurate but slower and bigger.</div>
+                        </div>
+                        <div class="setting-control setting-control-full whisper-model-control">
+                            <!-- Hidden field saveSettings() reads: full local path of the selected (downloaded) model. -->
+                            <input type="hidden" id="whisperModelPath">
+                            <select id="whisperModelSelect"></select>
+                            <div class="whisper-model-status" id="whisperModelStatus">
+                                <span class="whisper-ready hidden" id="whisperReady">
+                                    <span class="status-dot ready" aria-hidden="true"></span> Ready
+                                </span>
+                                <button type="button" class="btn-secondary hidden" id="whisperDownloadBtn">
+                                    <span class="btn-ring hidden" id="whisperDownloadRing" aria-hidden="true">
+                                        <svg viewBox="0 0 20 20" width="14" height="14">
+                                            <circle class="btn-ring-track" cx="10" cy="10" r="8"/>
+                                            <circle class="btn-ring-fill" id="whisperDownloadRingFill" cx="10" cy="10" r="8"/>
+                                        </svg>
+                                    </span>
+                                    <span class="btn-label" id="whisperDownloadLabel">Download</span>
+                                </button>
+                                <button type="button" class="btn-secondary danger hidden" id="whisperDeleteBtn">Delete</button>
+                            </div>
+                            <div class="control-error hidden" id="whisperError"></div>
                         </div>
                     </div>
                     <div class="setting-row" id="micDeviceRow">
-                        <label>Microphone</label>
-                        <select id="audioDevice">
-                            <option value="default">System Default</option>
-                        </select>
+                        <div class="setting-info">
+                            <div class="setting-title">Microphone</div>
+                            <div class="setting-desc">Input device used to capture your voice. System Default follows your macOS sound settings.</div>
+                        </div>
+                        <div class="setting-control">
+                            <select id="audioDevice">
+                                <option value="default">System Default</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -99,40 +180,88 @@
             <div class="section hidden" id="section-llm">
                 <div class="card">
                     <div class="setting-row">
-                        <label>LLM Enabled</label>
-                        <input type="checkbox" id="llmEnabled" class="toggle">
+                        <div class="setting-info">
+                            <div class="setting-title">Enable LLM cleanup</div>
+                            <div class="setting-desc">Run transcriptions through an LLM to fix grammar, punctuation, and remove filler words.</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="checkbox" id="llmEnabled" class="toggle">
+                        </div>
                     </div>
                     <div class="setting-row">
-                        <label>Correction Level</label>
-                        <div class="slider-group">
+                        <div class="setting-info">
+                            <div class="setting-title">Correction level</div>
+                            <div class="setting-desc">How aggressively the LLM rewrites — from light punctuation fixes to full cleanup.</div>
+                        </div>
+                        <div class="setting-control slider-group">
                             <input type="range" id="llmAccuracy" min="1" max="5" step="1" value="3">
                             <span id="accuracyLabel">Balanced</span>
                         </div>
                     </div>
                     <div class="setting-row">
-                        <label>Provider</label>
-                        <select id="llmProvider">
-                            <option value="openai">OpenAI</option>
-                            <option value="anthropic">Anthropic</option>
-                            <option value="ollama">Ollama</option>
-                            <option value="lmstudio">LM Studio</option>
-                        </select>
+                        <div class="setting-info">
+                            <div class="setting-title">Provider</div>
+                            <div class="setting-desc">Which LLM service runs the cleanup. Local providers keep data on your machine.</div>
+                        </div>
+                        <div class="setting-control">
+                            <select id="llmProvider">
+                                <option value="openai" data-desc="Cloud — GPT models via OpenAI API">OpenAI</option>
+                                <option value="anthropic" data-desc="Cloud — Claude models via Anthropic API">Anthropic</option>
+                                <option value="openrouter" data-desc="Cloud — many models via OpenRouter">OpenRouter</option>
+                                <option value="ollama" data-desc="Local — runs models on your machine">Ollama (local)</option>
+                                <option value="lmstudio" data-desc="Local — runs models on your machine">LM Studio (local)</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="setting-row">
-                        <label>Model</label>
-                        <input type="text" id="llmModel" placeholder="llama3.2">
+                        <div class="setting-info">
+                            <div class="setting-title">Model</div>
+                            <div class="setting-desc">Name of the model to call, as expected by the selected provider.</div>
+                        </div>
+                        <div class="setting-control">
+                            <select id="llmModel"></select>
+                        </div>
                     </div>
                     <div class="setting-row" id="endpointRow">
-                        <label>Endpoint</label>
-                        <input type="text" id="llmEndpoint" placeholder="http://localhost:11434/v1/chat/completions" disabled>
+                        <div class="setting-info">
+                            <div class="setting-title">Endpoint</div>
+                            <div class="setting-desc">API URL requests are sent to. Set automatically from the chosen provider.</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="text" id="llmEndpoint" placeholder="http://localhost:11434/v1/chat/completions" disabled>
+                        </div>
                     </div>
                     <div class="setting-row" id="apiKeyRow">
-                        <label>API Key</label>
-                        <input type="password" id="llmApiKey" placeholder="sk-...">
+                        <div class="setting-info">
+                            <div class="setting-title">API Key</div>
+                            <div class="setting-desc">Secret key used to authenticate with the cloud provider.</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="password" id="llmApiKey" placeholder="sk-…">
+                        </div>
                     </div>
-                    <div class="setting-column">
-                        <label>System Prompt</label>
-                        <textarea id="llmPrompt" rows="6"></textarea>
+                    <div class="setting-row setting-row-stacked">
+                        <div class="setting-info">
+                            <div class="setting-title">Tone</div>
+                            <div class="setting-desc">How the LLM shapes capitalization and punctuation in the final text.</div>
+                        </div>
+                        <div class="setting-control setting-control-full">
+                            <input type="hidden" id="llmTone" value="formal">
+                            <div class="tone-cards" id="toneCards" role="radiogroup" aria-label="Tone">
+                                <button type="button" class="tone-card" data-tone="formal" role="radio" aria-checked="true">
+                                    <span class="tone-card-title">Formal</span>
+                                    <span class="tone-card-desc">Caps + punctuation</span>
+                                </button>
+                                <button type="button" class="tone-card" data-tone="casual" role="radio" aria-checked="false">
+                                    <span class="tone-card-title">Casual</span>
+                                    <span class="tone-card-desc">Caps + less punctuation</span>
+                                </button>
+                                <button type="button" class="tone-card" data-tone="veryCasual" role="radio" aria-checked="false">
+                                    <span class="tone-card-title">Very casual</span>
+                                    <span class="tone-card-desc">No caps + less punctuation</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -141,36 +270,41 @@
             <div class="section hidden" id="section-overlay">
                 <div class="card">
                     <div class="setting-row">
-                        <label>Verbose Overlay</label>
-                        <input type="checkbox" id="verboseOverlay" class="toggle">
+                        <div class="setting-info">
+                            <div class="setting-title">Verbose Overlay</div>
+                            <div class="setting-desc">Show extra status detail in the recording HUD, such as the active engine and stages.</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="checkbox" id="verboseOverlay" class="toggle">
+                        </div>
                     </div>
                     <div class="setting-row">
-                        <label>Overlay Position</label>
-                        <select id="overlayPosition">
-                            <option value="top">Top</option>
-                            <option value="bottom">Bottom</option>
-                        </select>
+                        <div class="setting-info">
+                            <div class="setting-title">Overlay Position</div>
+                            <div class="setting-desc">Where the recording HUD appears on screen while you dictate.</div>
+                        </div>
+                        <div class="setting-control">
+                            <select id="overlayPosition">
+                                <option value="top" data-desc="Show the HUD near the top of the screen">Top</option>
+                                <option value="bottom" data-desc="Show the HUD near the bottom of the screen">Bottom</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- History Section -->
             <div class="section hidden" id="section-history">
-                <div class="card">
-                    <div class="editor-toolbar">
-                        <span class="hint" id="historyCount"></span>
-                        <button class="btn-secondary danger" id="clearHistoryBtn">Clear history</button>
-                    </div>
-                    <div class="editor-list" id="historyList"></div>
-                </div>
+                <p class="section-desc">Recent transcriptions captured on this device. History is not saved while Privacy Mode is on.</p>
+                <div class="history-list" id="historyList"></div>
             </div>
 
             <!-- Dictionary Section -->
             <div class="section hidden" id="section-dictionary">
+                <p class="section-desc">Words the transcriber should recognize and spell correctly, like names and jargon.</p>
                 <div class="card">
-                    <div class="hint">Words the transcriber should recognize and spell correctly.</div>
                     <div class="add-row">
-                        <input type="text" id="dictionaryInput" placeholder="Add a word...">
+                        <input type="text" id="dictionaryInput" placeholder="Add a word…">
                         <button class="btn-secondary" id="dictionaryAddBtn">Add</button>
                     </div>
                     <div class="editor-list" id="dictionaryList"></div>
@@ -179,11 +313,11 @@
 
             <!-- Snippets Section -->
             <div class="section hidden" id="section-snippets">
+                <p class="section-desc">Type a trigger phrase to expand it into a longer piece of snippet text.</p>
                 <div class="card">
-                    <div class="hint">Type a trigger phrase to expand it into the snippet text.</div>
                     <div class="add-row">
                         <input type="text" id="snippetTriggerInput" placeholder="Trigger">
-                        <input type="text" id="snippetTextInput" placeholder="Expands to...">
+                        <input type="text" id="snippetTextInput" placeholder="Expands to…">
                         <button class="btn-secondary" id="snippetAddBtn">Add</button>
                     </div>
                     <div class="editor-list" id="snippetsList"></div>
@@ -192,24 +326,14 @@
 
             <!-- Voice Commands Section -->
             <div class="section hidden" id="section-commands">
+                <p class="section-desc">Say a trigger phrase to fire a key combination, like <code>cmd+s</code> to save.</p>
                 <div class="card">
-                    <div class="hint">Say a trigger phrase to fire a key combination (e.g. <code>cmd+s</code>).</div>
                     <div class="add-row">
                         <input type="text" id="commandTriggerInput" placeholder="Trigger phrase">
                         <input type="text" id="commandComboInput" placeholder="Key combo (cmd+s)">
                         <button class="btn-secondary" id="commandAddBtn">Add</button>
                     </div>
                     <div class="editor-list" id="commandsList"></div>
-                </div>
-            </div>
-
-            <!-- Files Section (advanced: raw JSON) -->
-            <div class="section hidden" id="section-files">
-                <div class="card">
-                    <div class="hint">Edit the underlying config files directly. Use the dedicated sections for a friendlier editor.</div>
-                    <button class="btn-secondary" id="editDictionary">Open dictionary.json...</button>
-                    <button class="btn-secondary" id="editSnippets">Open snippets.json...</button>
-                    <button class="btn-secondary" id="editCommands">Open commands.json...</button>
                 </div>
             </div>
 

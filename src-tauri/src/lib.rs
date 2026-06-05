@@ -3,6 +3,7 @@ mod frontmost_app;
 mod hotkey;
 mod llm;
 mod logging;
+mod models;
 mod settings;
 mod text_injector;
 mod update_checker;
@@ -42,7 +43,35 @@ fn get_settings(state: tauri::State<'_, AppState>) -> Result<SettingsData, Strin
 }
 
 #[tauri::command]
-fn save_settings(state: tauri::State<'_, AppState>, data: SettingsData) -> Result<(), String> {
+fn save_settings(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    data: SettingsData,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    let old_hotkey = {
+        let s = state.settings.lock().map_err(|e| e.to_string())?;
+        s.data.hotkey.clone()
+    };
+    let new_hotkey = data.hotkey.clone();
+
+    // Re-register the global shortcut if the hotkey changed. Use on_shortcut (not
+    // register) so the handler is attached — the builder-level handler does NOT
+    // fire for runtime registrations. Register the new one first so we can reject
+    // an invalid combo without losing the working hotkey.
+    if new_hotkey != old_hotkey {
+        let gs = app.global_shortcut();
+        let handler = |app: &AppHandle, _sc: &_, event: tauri_plugin_global_shortcut::ShortcutEvent| {
+            handle_hotkey_event(app, event.state);
+        };
+        if let Err(e) = gs.on_shortcut(new_hotkey.as_str(), handler) {
+            return Err(format!("Invalid shortcut \"{}\": {}", new_hotkey, e));
+        }
+        let _ = gs.unregister(old_hotkey.as_str());
+        tracing::info!("Hotkey changed: {} → {}", old_hotkey, new_hotkey);
+    }
+
     let mut s = state.settings.lock().map_err(|e| e.to_string())?;
     s.data = data;
     s.save().map_err(|e| e.to_string())
@@ -193,17 +222,39 @@ fn open_preferences(app: &AppHandle) {
         return;
     }
 
-    WebviewWindowBuilder::new(
+    let builder = WebviewWindowBuilder::new(
         app,
         "preferences",
         WebviewUrl::App("preferences/index.html".into()),
     )
-    .title("Dict Preferences")
-    .inner_size(620.0, 480.0)
-    .resizable(false)
-    .center()
-    .build()
-    .ok();
+    .title("")
+    .inner_size(760.0, 600.0)
+    .min_inner_size(640.0, 480.0)
+    .resizable(true)
+    .transparent(true)
+    .center();
+
+    // macOS: overlay title bar so content extends under the floating traffic lights
+    #[cfg(target_os = "macos")]
+    let builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay);
+
+    match builder.build() {
+        Ok(_win) => {
+            // macOS: apply a native translucent sidebar material behind the window.
+            // The frontend keeps its content pane opaque and its sidebar transparent,
+            // producing a translucent-sidebar look like macOS System Settings.
+            #[cfg(target_os = "macos")]
+            {
+                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                if let Err(e) =
+                    apply_vibrancy(&_win, NSVisualEffectMaterial::Sidebar, None, None)
+                {
+                    tracing::error!("Failed to apply window vibrancy: {}", e);
+                }
+            }
+        }
+        Err(e) => tracing::error!("Failed to open preferences window: {}", e),
+    }
 }
 
 fn open_onboarding(app: &AppHandle) {
@@ -622,6 +673,51 @@ fn handle_transcription(app: &AppHandle, text: &str) {
     });
 }
 
+/// Dispatch a global-hotkey event to start/stop recording based on the hotkey mode.
+/// Registered via `on_shortcut` (not the builder's `with_handler`) so that hotkeys
+/// re-registered at runtime (when the user changes the shortcut and saves) actually
+/// fire — the builder-level handler is NOT invoked for runtime `register()` calls.
+fn handle_hotkey_event(app: &AppHandle, shortcut_state: ShortcutState) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let state = app.state::<AppState>();
+        let mode = {
+            let s = state.settings.lock().unwrap();
+            s.data.hotkey_mode.clone()
+        };
+
+        match mode {
+            settings::HotkeyMode::Toggle => {
+                if shortcut_state == ShortcutState::Pressed {
+                    let is_rec = *state.is_recording.lock().unwrap();
+                    if is_rec {
+                        stop_recording(app);
+                    } else {
+                        start_recording(app);
+                    }
+                }
+            }
+            settings::HotkeyMode::PushToTalk => match shortcut_state {
+                ShortcutState::Pressed => {
+                    let is_rec = *state.is_recording.lock().unwrap();
+                    if !is_rec {
+                        start_recording(app);
+                    }
+                }
+                ShortcutState::Released => {
+                    let is_rec = *state.is_recording.lock().unwrap();
+                    if is_rec {
+                        stop_recording(app);
+                    }
+                }
+            },
+        }
+    }));
+
+    if let Err(e) = result {
+        tracing::error!("Hotkey handler panicked: {:?}", e);
+    }
+}
+
 // ─── App Entry Point ────────────────────────────────────
 
 pub fn run() {
@@ -641,52 +737,7 @@ pub fn run() {
     );
 
     tauri::Builder::default()
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        let state = app.state::<AppState>();
-                        let mode = {
-                            let s = state.settings.lock().unwrap();
-                            s.data.hotkey_mode.clone()
-                        };
-
-                        match mode {
-                            settings::HotkeyMode::Toggle => {
-                                if event.state == ShortcutState::Pressed {
-                                    let is_rec = *state.is_recording.lock().unwrap();
-                                    if is_rec {
-                                        stop_recording(app);
-                                    } else {
-                                        start_recording(app);
-                                    }
-                                }
-                            }
-                            settings::HotkeyMode::PushToTalk => {
-                                match event.state {
-                                    ShortcutState::Pressed => {
-                                        let is_rec = *state.is_recording.lock().unwrap();
-                                        if !is_rec {
-                                            start_recording(app);
-                                        }
-                                    }
-                                    ShortcutState::Released => {
-                                        let is_rec = *state.is_recording.lock().unwrap();
-                                        if is_rec {
-                                            stop_recording(app);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }));
-
-                    if let Err(e) = result {
-                        tracing::error!("Hotkey handler panicked: {:?}", e);
-                    }
-                })
-                .build(),
-        )
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(AppState {
@@ -719,6 +770,10 @@ pub fn run() {
             find_whisper_binary_cmd,
             open_accessibility_settings,
             open_config_file,
+            models::list_llm_models,
+            models::list_whisper_models,
+            models::download_whisper_model,
+            models::delete_whisper_model,
         ])
         .setup(move |app| {
             // Request all permissions on macOS at startup
@@ -734,12 +789,22 @@ pub fn run() {
                 });
             }
 
-            // Register global hotkey
+            // Register global hotkey (from settings, falling back to the default)
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
-                let shortcut_str = hotkey::default_hotkey();
-                if let Err(e) = app.global_shortcut().register(shortcut_str) {
+                let shortcut_str = {
+                    let state = app.state::<AppState>();
+                    let s = state.settings.lock().unwrap();
+                    s.data.hotkey.clone()
+                };
+                let handler = |app: &AppHandle, _sc: &_, event: tauri_plugin_global_shortcut::ShortcutEvent| {
+                    handle_hotkey_event(app, event.state);
+                };
+                if let Err(e) = app.global_shortcut().on_shortcut(shortcut_str.as_str(), handler) {
                     tracing::error!("Failed to register hotkey '{}': {}", shortcut_str, e);
+                    // Fall back to the platform default so the app stays usable
+                    let fallback = hotkey::default_hotkey();
+                    let _ = app.global_shortcut().on_shortcut(fallback, handler);
                 } else {
                     tracing::info!("Registered hotkey: {}", shortcut_str);
                 }
@@ -794,7 +859,7 @@ pub fn run() {
 
             tracing::info!(
                 "Dict is running. Press {} to dictate.",
-                hotkey::default_hotkey()
+                app.state::<AppState>().settings.lock().unwrap().data.hotkey
             );
             Ok(())
         })
