@@ -8,9 +8,6 @@ mod text_injector;
 mod update_checker;
 mod whisper;
 
-#[cfg(target_os = "macos")]
-mod apple_speech;
-
 use audio::AudioCapture;
 use settings::{
     AppSettings, CustomDictionary, SettingsData, SnippetsStore, TranscriptionHistory,
@@ -31,6 +28,9 @@ pub struct AppState {
     pub audio_capture: Mutex<AudioCapture>,
     pub is_recording: Mutex<bool>,
     pub recording_stopped_at: Mutex<Option<Instant>>,
+    /// Incremented on each recording start so a stale auto-stop timer
+    /// from a previous recording can't stop a newer one.
+    pub recording_generation: Mutex<u64>,
 }
 
 // ─── Tauri Commands ─────────────────────────────────────
@@ -408,74 +408,77 @@ fn start_recording(app: &AppHandle) {
         }
     }
 
-    let (device_id, engine, language) = {
+    let (device_id, language) = {
         let s = state.settings.lock().unwrap();
         (
             s.data.audio_input_device.clone(),
-            s.data.stt_engine.clone(),
             s.data.whisper_language.clone(),
         )
     };
 
-    tracing::info!("Engine: {:?}, Language: {}", engine, language);
-
-    match engine {
-        settings::STTEngine::Whisper => {
-            let app_handle = app.clone();
-            let mut capture = state.audio_capture.lock().unwrap();
-
-            capture.set_level_callback(move |level| {
-                app_handle.emit("audio-level", level).ok();
-            });
-
-            let dev = device_id.as_deref();
-            if let Err(e) = capture.start(dev) {
-                tracing::error!("Failed to start audio capture: {}", e);
-                return;
-            }
-        }
-        settings::STTEngine::Apple => {
-            #[cfg(target_os = "macos")]
-            {
-                let app_handle = app.clone();
-                let app_handle2 = app.clone();
-                let app_handle3 = app.clone();
-                apple_speech::start(
-                    &language,
-                    apple_speech::SpeechCallbacks {
-                        on_result: Box::new(move |text, is_final| {
-                            if is_final {
-                                handle_transcription(&app_handle, text);
-                            } else {
-                                // Emit partial result for overlay display
-                                app_handle.emit("partial-result", text).ok();
-                            }
-                        }),
-                        on_level: Box::new(move |level| {
-                            app_handle2.emit("audio-level", level).ok();
-                        }),
-                        on_error: Box::new(move |error| {
-                            tracing::error!("Apple Speech error: {}", error);
-                            hide_overlay(&app_handle3);
-                        }),
-                    },
-                );
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                tracing::error!("Apple Speech is only available on macOS");
-                return;
-            }
-        }
-    }
+    tracing::info!("Engine: Whisper, Language: {}", language);
 
     {
-        let mut is_rec = state.is_recording.lock().unwrap();
-        *is_rec = true;
+        let app_handle = app.clone();
+        let mut capture = state.audio_capture.lock().unwrap();
+
+        capture.set_level_callback(move |level| {
+            app_handle.emit("audio-level", level).ok();
+        });
+
+        let dev = device_id.as_deref();
+        if let Err(e) = capture.start(dev) {
+            tracing::error!("Failed to start audio capture: {}", e);
+            return;
+        }
     }
 
-    tracing::info!("Recording started (engine: {:?})", engine);
+    let generation = {
+        let mut is_rec = state.is_recording.lock().unwrap();
+        *is_rec = true;
+        let mut gen = state.recording_generation.lock().unwrap();
+        *gen = gen.wrapping_add(1);
+        *gen
+    };
+
+    tracing::info!("Recording started (engine: Whisper)");
     show_overlay(app);
+
+    spawn_recording_timer(app, generation);
+}
+
+/// Background timer enforcing the 15-second hard recording limit.
+/// Emits `recording-warning` to the overlay at 12s and hard-stops at 15s,
+/// but only if this recording (identified by `generation`) is still the
+/// active one — a stale timer from a previous recording is a no-op.
+fn spawn_recording_timer(app: &AppHandle, generation: u64) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        // Returns true if recording is still active AND this timer owns it.
+        let still_owns = |app: &AppHandle| -> bool {
+            let state = app.state::<AppState>();
+            let is_rec = *state.is_recording.lock().unwrap();
+            let gen = *state.recording_generation.lock().unwrap();
+            is_rec && gen == generation
+        };
+
+        // 12s → warning
+        std::thread::sleep(std::time::Duration::from_secs(12));
+        if !still_owns(&app) {
+            return;
+        }
+        if let Some(win) = app.get_webview_window("overlay") {
+            let _ = win.emit("recording-warning", ());
+        }
+
+        // +3s (15s total) → hard stop
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        if !still_owns(&app) {
+            return;
+        }
+        tracing::info!("Recording hit 15s hard limit, auto-stopping");
+        stop_recording(&app);
+    });
 }
 
 fn stop_recording(app: &AppHandle) {
@@ -498,11 +501,6 @@ fn stop_recording(app: &AppHandle) {
         *stopped = Some(Instant::now());
     }
 
-    let engine = {
-        let s = state.settings.lock().unwrap();
-        s.data.stt_engine.clone()
-    };
-
     tracing::info!("Recording stopped");
 
     if let Some(win) = app.get_webview_window("overlay") {
@@ -512,47 +510,36 @@ fn stop_recording(app: &AppHandle) {
         );
     }
 
-    match engine {
-        settings::STTEngine::Whisper => {
-            let wav_path = {
-                let mut capture = state.audio_capture.lock().unwrap();
-                capture.stop()
-            };
+    let wav_path = {
+        let mut capture = state.audio_capture.lock().unwrap();
+        capture.stop()
+    };
 
-            match wav_path {
-                Ok(path) => {
-                    let app_handle = app.clone();
-                    std::thread::spawn(move || {
-                        let state = app_handle.state::<AppState>();
-                        let (model_path, language) = {
-                            let s = state.settings.lock().unwrap();
-                            (
-                                s.data.whisper_model_path.clone(),
-                                s.data.whisper_language.clone(),
-                            )
-                        };
+    match wav_path {
+        Ok(path) => {
+            let app_handle = app.clone();
+            std::thread::spawn(move || {
+                let state = app_handle.state::<AppState>();
+                let (model_path, language) = {
+                    let s = state.settings.lock().unwrap();
+                    (
+                        s.data.whisper_model_path.clone(),
+                        s.data.whisper_language.clone(),
+                    )
+                };
 
-                        match whisper::transcribe(&path, &model_path, &language) {
-                            Ok(text) => handle_transcription(&app_handle, &text),
-                            Err(e) => {
-                                tracing::error!("Whisper error: {}", e);
-                                hide_overlay(&app_handle);
-                            }
-                        }
-                    });
+                match whisper::transcribe(&path, &model_path, &language) {
+                    Ok(text) => handle_transcription(&app_handle, &text),
+                    Err(e) => {
+                        tracing::error!("Whisper error: {}", e);
+                        hide_overlay(&app_handle);
+                    }
                 }
-                Err(e) => {
-                    tracing::error!("Audio capture error: {}", e);
-                    hide_overlay(app);
-                }
-            }
+            });
         }
-        settings::STTEngine::Apple => {
-            // Apple Speech handles final delivery via its own 3s timeout
-            #[cfg(target_os = "macos")]
-            {
-                apple_speech::stop();
-            }
+        Err(e) => {
+            tracing::error!("Audio capture error: {}", e);
+            hide_overlay(app);
         }
     }
 }
@@ -624,10 +611,14 @@ fn handle_transcription(app: &AppHandle, text: &str) {
             show_accessibility_alert(&app_handle);
         }
 
-        let state = app_handle.state::<AppState>();
-        let engine = format!("{:?}", settings_data.stt_engine);
-        let mut history = state.history.lock().unwrap();
-        history.add(&text_owned, &cleaned, &frontmost, &engine);
+        // Privacy mode: don't persist transcription history to disk.
+        if settings_data.privacy_mode {
+            tracing::info!("Privacy mode on: not saving transcription to history");
+        } else {
+            let state = app_handle.state::<AppState>();
+            let mut history = state.history.lock().unwrap();
+            history.add(&text_owned, &cleaned, &frontmost, "Whisper");
+        }
     });
 }
 
@@ -639,7 +630,7 @@ pub fn run() {
     let app_settings = AppSettings::load();
     let show_onboarding = !app_settings.data.onboarding_done;
     tracing::info!("Dict starting up");
-    tracing::info!("STT engine: {:?}", app_settings.data.stt_engine);
+    tracing::info!("Engine: Whisper");
     tracing::info!(
         "LLM cleanup: {}",
         if app_settings.data.llm_enabled {
@@ -707,6 +698,7 @@ pub fn run() {
             audio_capture: Mutex::new(AudioCapture::new()),
             is_recording: Mutex::new(false),
             recording_stopped_at: Mutex::new(None),
+            recording_generation: Mutex::new(0),
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
@@ -735,10 +727,7 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(1));
-                    // Request mic + speech recognition permissions (triggers OS dialogs)
-                    apple_speech::request_permissions();
                     // Check accessibility — prompt user if not granted
-                    std::thread::sleep(std::time::Duration::from_millis(500));
                     if !text_injector::check_accessibility() {
                         show_accessibility_alert(&app_handle);
                     }

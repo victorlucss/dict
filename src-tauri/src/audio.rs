@@ -12,8 +12,10 @@ pub struct AudioDeviceInfo {
     pub name: String,
 }
 
-/// Wrapper to make cpal::Stream Send+Sync (safe because we protect with Mutex)
-struct SendStream(Option<Stream>);
+/// Wrapper to make cpal::Stream Send+Sync (safe because we protect with Mutex).
+/// The field is never read directly — it exists to keep the stream alive (RAII);
+/// replacing it with `SendStream(None)` drops the stream and stops capture.
+struct SendStream(#[allow(dead_code)] Option<Stream>);
 // SAFETY: Stream is only accessed through a Mutex<AudioCapture> which serializes access.
 unsafe impl Send for SendStream {}
 unsafe impl Sync for SendStream {}

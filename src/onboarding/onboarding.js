@@ -24,10 +24,9 @@ const macSteps = [
     },
     {
         icon: '🔊',
-        title: 'Choose STT Engine',
-        description: 'Apple Speech: Built-in, no setup needed.\nWhisper: More accurate, requires Homebrew install.',
-        action: 'Use Apple Speech',
-        secondary: 'Use Whisper'
+        title: 'Set Up Whisper',
+        description: 'Dict transcribes with Whisper, running locally on your machine.\nInstall it with Homebrew: brew install whisper-cpp\nThen download a GGML model file and point Dict at it in Preferences → Speech.',
+        action: 'Continue'
     },
     {
         icon: '✅',
@@ -48,6 +47,12 @@ const otherSteps = [
         icon: '🎤',
         title: 'Microphone Access',
         description: 'Dict needs microphone access to hear your voice.\nYour system may prompt for permission.',
+        action: 'Continue'
+    },
+    {
+        icon: '🔊',
+        title: 'Set Up Whisper',
+        description: 'Dict transcribes with Whisper, running locally on your machine.\nInstall whisper-cpp using your package manager.\nThen download a GGML model file and point Dict at it in Preferences → Speech.',
         action: 'Continue'
     },
     {
@@ -96,12 +101,6 @@ async function handlePrimary() {
         // Open system settings
         invoke('open_accessibility_settings').catch(console.error);
         advance();
-    } else if (step.title.includes('Choose STT')) {
-        // Use Apple Speech
-        await invoke('save_settings', {
-            data: { ...(await invoke('get_settings')), sttEngine: 'apple' }
-        });
-        advance();
     } else if (step.action === 'Done') {
         await finish();
     } else {
@@ -110,9 +109,6 @@ async function handlePrimary() {
 }
 
 async function handleSecondary() {
-    // Use Whisper
-    const settings = await invoke('get_settings');
-    await invoke('save_settings', { data: { ...settings, sttEngine: 'whisper' } });
     advance();
 }
 

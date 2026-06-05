@@ -14,6 +14,21 @@ pub async fn process(
         return text.to_string();
     }
 
+    // Privacy mode: never send transcriptions to a cloud LLM provider.
+    // Local providers (Ollama, LM Studio) are still allowed to run.
+    if settings.privacy_mode
+        && matches!(
+            settings.llm_provider,
+            LLMProvider::Openai | LLMProvider::Anthropic
+        )
+    {
+        tracing::info!(
+            "Privacy mode on: skipping cloud LLM ({:?}), returning raw transcription",
+            settings.llm_provider
+        );
+        return text.to_string();
+    }
+
     let endpoint = match settings.llm_provider {
         LLMProvider::Openai => "https://api.openai.com/v1/chat/completions",
         LLMProvider::Anthropic => "https://api.anthropic.com/v1/messages",

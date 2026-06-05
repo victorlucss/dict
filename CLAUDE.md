@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Dict?
 
-Dict is a cross-platform (macOS, Linux, Windows) menu-bar/tray app that converts voice to text via a global hotkey. It supports two STT backends (Apple Speech on macOS, Whisper on all platforms) with optional LLM post-processing, and pastes the result into whatever app has focus.
+Dict is a cross-platform (macOS, Linux, Windows) menu-bar/tray app that converts voice to text via a global hotkey. It uses Whisper (local `whisper-cli`) as its STT backend on all platforms, with optional LLM post-processing, and pastes the result into whatever app has focus.
 
 Built with **Rust + Tauri 2.0** for the backend and vanilla HTML/CSS/JS for the frontend.
 
@@ -63,15 +63,14 @@ The app is structured as a Tauri 2.0 application with a Rust backend and HTML/JS
 ```
 Global Hotkey (tauri-plugin-global-shortcut, Alt+Space / Ctrl+Alt+Space)
     → start_recording() / stop_recording()
-        → Apple Speech (macOS: Swift FFI bridge via apple_speech.rs)
-          OR Whisper (audio.rs capture → whisper.rs CLI subprocess)
+        → Whisper (audio.rs capture → whisper.rs CLI subprocess)
             → LLM Processor (llm.rs: OpenAI/Anthropic/Ollama/LM Studio)
                 → Text Injector (text_injector.rs: arboard clipboard + enigo paste)
 
 System Tray (Tauri tray-icon: mode toggle, preferences, quit)
 Recording Overlay (overlay window: animated dots, audio level)
 Settings (settings.rs: serde JSON at ~/.config/dict/config.json)
-Preferences Window (preferences/: sidebar + 5 sections, buffered save)
+Preferences Window (preferences/: sidebar sections, buffered save)
 Update Checker (update_checker.rs: semver comparison against remote)
 ```
 
@@ -79,7 +78,7 @@ Update Checker (update_checker.rs: semver comparison against remote)
 
 Vanilla HTML/CSS/JS with no build step:
 - `overlay/` — Recording HUD with animated dots and audio level visualization
-- `preferences/` — Settings UI with 5 sections (General, Speech, LLM, Overlay, Files)
+- `preferences/` — Settings UI (General, Speech, LLM, Overlay, History, Dictionary, Snippets, Commands, Files) with in-app editors for history/dictionary/snippets/voice-commands
 - `onboarding/` — First-launch setup wizard (platform-aware steps)
 
 ### Key Modules
@@ -89,8 +88,7 @@ Vanilla HTML/CSS/JS with no build step:
 | `lib.rs` | App orchestration, state machine, Tauri commands, tray menu |
 | `settings.rs` | SettingsData, persistence, custom dictionary, snippets, voice commands, history |
 | `audio.rs` | cpal microphone capture, rubato resampling to 16kHz, hound WAV writing |
-| `apple_speech.rs` | macOS-only Swift FFI bridge to SFSpeechRecognizer |
-| `whisper.rs` | whisper-cli binary discovery and subprocess transcription |
+| `whisper.rs` | whisper-cli binary discovery and subprocess transcription (the sole STT engine) |
 | `llm.rs` | LLM post-processing (4 providers, correction levels 1-5) |
 | `text_injector.rs` | Clipboard paste via arboard + enigo, key combo simulation |
 | `hotkey.rs` | Hotkey defaults and debounce state |
@@ -98,19 +96,12 @@ Vanilla HTML/CSS/JS with no build step:
 | `update_checker.rs` | Remote version check with semver comparison |
 | `logging.rs` | tracing-subscriber with file + stdout |
 
-### Swift Bridge (macOS only)
-
-`src-tauri/swift-bridge/DictSpeechBridge.swift` provides Apple Speech recognition via C FFI. It's compiled to a static library by `build.rs` and linked automatically. The bridge exposes:
-- `dict_speech_start(language)` — Start streaming recognition
-- `dict_speech_stop()` — Stop with 3s timeout for final result
-- `dict_speech_cancel()` — Cancel immediately
-- `dict_speech_set_callbacks(...)` — Register result/level/error callbacks
-
 ### Key Design Decisions
 
-- Tauri 2.0 for cross-platform (macOS, Linux, Windows) with a single Rust codebase
-- Apple Speech available only on macOS via Swift static library FFI bridge
-- Whisper runs as a CLI subprocess (`whisper-cli`) on all platforms
+- Tauri 2.0 for cross-platform (macOS, Linux, Windows) with a single Rust codebase — no platform-specific STT, so the build has no Swift/native bridge to compile
+- Whisper (`whisper-cli` + a local GGML model) is the sole STT engine on all platforms
+- Recording has a 15-second hard limit; the backend emits a `recording-warning` event to the overlay at 12s and auto-stops at 15s (guarded by a per-recording generation id)
+- `privacy_mode` skips cloud LLM providers (OpenAI/Anthropic) and suppresses history persistence
 - `tauri-plugin-global-shortcut` for hotkeys (Alt+Space on macOS, Ctrl+Alt+Space elsewhere)
 - Text injection uses `arboard` (clipboard) + `enigo` (key simulation) — cross-platform
 - `macOSPrivateApi: true` in tauri.conf.json + `LSUIElement` for menu-bar-only mode
@@ -121,12 +112,12 @@ Vanilla HTML/CSS/JS with no build step:
 
 ## Supported Languages
 
-Currently English and Brazilian Portuguese. The `whisper_language` setting affects both Apple Speech (locale mapping in Swift bridge) and Whisper (`-l` flag).
+Currently English and Brazilian Portuguese. The `whisper_language` setting maps to Whisper's `-l` flag.
 
 ## Runtime Requirements
 
 - **macOS 14+** / **Linux** (with GTK3, WebKitGTK) / **Windows 10+**
 - Microphone permission (prompted automatically)
 - Accessibility permission on macOS (for text pasting — granted manually in System Settings)
-- `brew install whisper-cpp` + a GGML model file if using Whisper engine
+- `brew install whisper-cpp` (or the platform equivalent) + a GGML model file — **required**, this is the only STT engine. Point `whisperModelPath` at the model in Preferences → Speech.
 - An OpenAI-compatible API endpoint if LLM cleanup is enabled

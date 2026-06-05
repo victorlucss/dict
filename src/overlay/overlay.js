@@ -28,6 +28,11 @@ listen('audio-level', (event) => {
     updateDots(level);
 });
 
+// Listen for the 15s-cutoff warning (emitted at 12s, 3s before the hard limit)
+listen('recording-warning', () => {
+    overlay.classList.add('warning');
+});
+
 // Listen for state changes
 listen('overlay-state', (event) => {
     const state = event.payload;
@@ -38,8 +43,14 @@ listen('overlay-state', (event) => {
         label.style.display = verbose ? 'block' : 'none';
     }
 
-    if (state.warning) {
-        overlay.classList.add('warning');
+    if (state.warning !== undefined) {
+        overlay.classList.toggle('warning', !!state.warning);
+    }
+
+    // A fresh recording / overlay show clears any previous warning state.
+    if (state.recording) {
+        overlay.classList.remove('warning');
+        stopProcessing();
     }
 
     if (state.processing) {

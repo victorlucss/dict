@@ -21,6 +21,18 @@
             <button class="sidebar-btn" data-section="overlay">
                 <span class="icon">▢</span> Overlay
             </button>
+            <button class="sidebar-btn" data-section="history">
+                <span class="icon">🕘</span> History
+            </button>
+            <button class="sidebar-btn" data-section="dictionary">
+                <span class="icon">📖</span> Dictionary
+            </button>
+            <button class="sidebar-btn" data-section="snippets">
+                <span class="icon">✂️</span> Snippets
+            </button>
+            <button class="sidebar-btn" data-section="commands">
+                <span class="icon">⌨️</span> Commands
+            </button>
             <button class="sidebar-btn" data-section="files">
                 <span class="icon">📁</span> Files
             </button>
@@ -67,13 +79,6 @@
             <!-- Speech Section -->
             <div class="section hidden" id="section-speech">
                 <div class="card">
-                    <div class="setting-row">
-                        <label>STT Engine</label>
-                        <select id="sttEngine">
-                            <option value="apple">Apple Speech</option>
-                            <option value="whisper">Whisper</option>
-                        </select>
-                    </div>
                     <div class="setting-row" id="whisperModelRow">
                         <label>Whisper Model</label>
                         <div class="file-row">
@@ -149,12 +154,62 @@
                 </div>
             </div>
 
-            <!-- Files Section -->
+            <!-- History Section -->
+            <div class="section hidden" id="section-history">
+                <div class="card">
+                    <div class="editor-toolbar">
+                        <span class="hint" id="historyCount"></span>
+                        <button class="btn-secondary danger" id="clearHistoryBtn">Clear history</button>
+                    </div>
+                    <div class="editor-list" id="historyList"></div>
+                </div>
+            </div>
+
+            <!-- Dictionary Section -->
+            <div class="section hidden" id="section-dictionary">
+                <div class="card">
+                    <div class="hint">Words the transcriber should recognize and spell correctly.</div>
+                    <div class="add-row">
+                        <input type="text" id="dictionaryInput" placeholder="Add a word...">
+                        <button class="btn-secondary" id="dictionaryAddBtn">Add</button>
+                    </div>
+                    <div class="editor-list" id="dictionaryList"></div>
+                </div>
+            </div>
+
+            <!-- Snippets Section -->
+            <div class="section hidden" id="section-snippets">
+                <div class="card">
+                    <div class="hint">Type a trigger phrase to expand it into the snippet text.</div>
+                    <div class="add-row">
+                        <input type="text" id="snippetTriggerInput" placeholder="Trigger">
+                        <input type="text" id="snippetTextInput" placeholder="Expands to...">
+                        <button class="btn-secondary" id="snippetAddBtn">Add</button>
+                    </div>
+                    <div class="editor-list" id="snippetsList"></div>
+                </div>
+            </div>
+
+            <!-- Voice Commands Section -->
+            <div class="section hidden" id="section-commands">
+                <div class="card">
+                    <div class="hint">Say a trigger phrase to fire a key combination (e.g. <code>cmd+s</code>).</div>
+                    <div class="add-row">
+                        <input type="text" id="commandTriggerInput" placeholder="Trigger phrase">
+                        <input type="text" id="commandComboInput" placeholder="Key combo (cmd+s)">
+                        <button class="btn-secondary" id="commandAddBtn">Add</button>
+                    </div>
+                    <div class="editor-list" id="commandsList"></div>
+                </div>
+            </div>
+
+            <!-- Files Section (advanced: raw JSON) -->
             <div class="section hidden" id="section-files">
                 <div class="card">
-                    <button class="btn-secondary" id="editDictionary">Edit Dictionary...</button>
-                    <button class="btn-secondary" id="editSnippets">Edit Snippets...</button>
-                    <button class="btn-secondary" id="editCommands">Edit Commands...</button>
+                    <div class="hint">Edit the underlying config files directly. Use the dedicated sections for a friendlier editor.</div>
+                    <button class="btn-secondary" id="editDictionary">Open dictionary.json...</button>
+                    <button class="btn-secondary" id="editSnippets">Open snippets.json...</button>
+                    <button class="btn-secondary" id="editCommands">Open commands.json...</button>
                 </div>
             </div>
 

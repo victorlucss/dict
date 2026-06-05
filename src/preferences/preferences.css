@@ -255,3 +255,130 @@ input[type="range"] {
     padding-top: 16px;
     margin-top: auto;
 }
+
+/* In-app editors (History / Dictionary / Snippets / Commands) */
+.editor-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.add-row {
+    display: flex;
+    gap: 8px;
+}
+
+.add-row input {
+    flex: 1;
+}
+
+.editor-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 380px;
+    overflow-y: auto;
+}
+
+.editor-list:empty::after {
+    content: 'Nothing here yet.';
+    color: #777;
+    font-size: 12px;
+    padding: 8px 2px;
+}
+
+.editor-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #333;
+    border: 1px solid #444;
+    border-radius: 5px;
+}
+
+.editor-item input {
+    flex: 1;
+    background: #2a2a2a;
+}
+
+.editor-item .word {
+    flex: 1;
+    font-size: 12px;
+}
+
+.btn-icon {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    line-height: 1;
+    padding: 0;
+    background: #3a3a3a;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-icon:hover {
+    background: #4a2a2a;
+    color: #ff6b6b;
+    border-color: #774;
+}
+
+.btn-secondary.danger {
+    color: #ff8080;
+    border-color: #744;
+}
+
+.btn-secondary.danger:hover {
+    background: #4a2a2a;
+}
+
+/* History entries */
+.history-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    background: #333;
+    border: 1px solid #444;
+    border-radius: 6px;
+}
+
+.history-meta {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 11px;
+    color: #888;
+}
+
+.history-badge {
+    padding: 1px 6px;
+    background: rgba(0, 122, 255, 0.18);
+    color: #4da3ff;
+    border-radius: 4px;
+    font-size: 10px;
+}
+
+.history-time {
+    margin-left: auto;
+}
+
+.history-raw {
+    font-size: 12px;
+    color: #bbb;
+}
+
+.history-cleaned {
+    font-size: 12px;
+    color: #e8e8e8;
+}
+
+.history-arrow {
+    color: #666;
+    margin: 0 4px;
+}

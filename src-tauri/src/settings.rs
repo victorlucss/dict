@@ -6,13 +6,6 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub enum STTEngine {
-    Apple,
-    Whisper,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub enum HotkeyMode {
     Toggle,
     PushToTalk,
@@ -41,8 +34,6 @@ pub enum LLMProvider {
 pub struct SettingsData {
     #[serde(default = "default_hotkey_mode")]
     pub hotkey_mode: HotkeyMode,
-    #[serde(default = "default_stt_engine")]
-    pub stt_engine: STTEngine,
     #[serde(default)]
     pub whisper_model_path: String,
     #[serde(default = "default_whisper_language")]
@@ -81,14 +72,6 @@ pub struct SettingsData {
 
 fn default_hotkey_mode() -> HotkeyMode {
     HotkeyMode::PushToTalk
-}
-
-fn default_stt_engine() -> STTEngine {
-    if cfg!(target_os = "macos") {
-        STTEngine::Apple
-    } else {
-        STTEngine::Whisper
-    }
 }
 
 fn default_whisper_language() -> String {
@@ -132,7 +115,6 @@ impl Default for SettingsData {
     fn default() -> Self {
         Self {
             hotkey_mode: default_hotkey_mode(),
-            stt_engine: default_stt_engine(),
             whisper_model_path: String::new(),
             whisper_language: default_whisper_language(),
             llm_enabled: false,
@@ -176,18 +158,6 @@ pub struct HistoryEntry {
     pub app: String,
     pub engine: String,
 }
-
-// ─── Supported Languages ────────────────────────────────
-
-pub struct Language {
-    pub code: &'static str,
-    pub name: &'static str,
-}
-
-pub const SUPPORTED_LANGUAGES: &[Language] = &[
-    Language { code: "en", name: "English" },
-    Language { code: "pt", name: "Português (Brasil)" },
-];
 
 // ─── App Settings (persistence) ─────────────────────────
 
@@ -510,7 +480,6 @@ mod tests {
         let json = serde_json::to_string_pretty(&data).unwrap();
         let parsed: SettingsData = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.hotkey_mode, data.hotkey_mode);
-        assert_eq!(parsed.stt_engine, data.stt_engine);
         assert_eq!(parsed.llm_accuracy, 3);
     }
 
