@@ -12,3 +12,6 @@ DerivedData/
 src-tauri/target/
 src-tauri/swift-bridge/lib/
 *.a
+
+src-tauri/icons/android/
+src-tauri/icons/ios/
