@@ -7,6 +7,7 @@ mod models;
 mod settings;
 mod text_injector;
 mod update_checker;
+mod updater;
 mod whisper;
 
 use audio::AudioCapture;
@@ -909,6 +910,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState {
             settings: Mutex::new(app_settings),
             dictionary: Mutex::new(CustomDictionary::load()),
@@ -1024,6 +1026,7 @@ pub fn run() {
                         }
                     }
                     "preferences" => open_preferences(&app_handle),
+                    "check_update" => updater::check_now(&app_handle),
                     "mode_toggle" => {
                         let state = app_handle.state::<AppState>();
                         let mut s = state.settings.lock().unwrap();
@@ -1050,6 +1053,9 @@ pub fn run() {
                 // the first actionable item. Direct click-to-open isn't reliable for
                 // a menu-attached tray icon, so we keep the menu as the entry point.
             }
+
+            // Start over-the-air update checks (one shortly after launch, then every 6h).
+            updater::start_background_checks(app.handle());
 
             // Show onboarding if first launch
             if show_onboarding {
