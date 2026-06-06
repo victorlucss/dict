@@ -243,3 +243,100 @@ pub fn check_accessibility() -> bool {
     // On Linux/Windows, accessibility check is not needed
     true
 }
+
+/// Whether the currently focused UI element can actually receive typed text.
+///
+/// `inject_text` simulates Cmd+V, but a paste into a non-editable context just
+/// bounces (the system "funk" beep) — and we can't see that from the keystroke.
+/// So we ask the Accessibility API directly: is the system-wide focused element's
+/// value settable, or is it a text-ish role? If nothing editable is focused (or
+/// Accessibility is denied, which makes the query fail), this returns false and
+/// the caller shows the copy-fallback popup instead of pasting into the void.
+#[cfg(target_os = "macos")]
+pub fn has_editable_focus() -> bool {
+    use core_foundation::base::TCFType;
+    use core_foundation::string::CFString;
+    use core_foundation_sys::base::{Boolean, CFRelease, CFTypeRef};
+    use core_foundation_sys::string::CFStringRef;
+    use std::ptr;
+
+    const AX_OK: i32 = 0;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXUIElementCreateSystemWide() -> CFTypeRef;
+        fn AXUIElementCopyAttributeValue(
+            element: CFTypeRef,
+            attribute: CFStringRef,
+            value: *mut CFTypeRef,
+        ) -> i32;
+        fn AXUIElementIsAttributeSettable(
+            element: CFTypeRef,
+            attribute: CFStringRef,
+            settable: *mut Boolean,
+        ) -> i32;
+    }
+
+    unsafe {
+        let system_wide = AXUIElementCreateSystemWide();
+        if system_wide.is_null() {
+            return false;
+        }
+
+        // The focused UI element across the whole system.
+        let focused_attr = CFString::from_static_string("AXFocusedUIElement");
+        let mut focused: CFTypeRef = ptr::null();
+        let err = AXUIElementCopyAttributeValue(
+            system_wide,
+            focused_attr.as_concrete_TypeRef(),
+            &mut focused,
+        );
+        CFRelease(system_wide as *const _);
+
+        // No focused element (or no Accessibility trust) → treat as not editable.
+        if err != AX_OK || focused.is_null() {
+            return false;
+        }
+
+        // Primary signal: can we write to its AXValue? True for text fields/areas.
+        let value_attr = CFString::from_static_string("AXValue");
+        let mut settable: Boolean = 0;
+        let settable_err = AXUIElementIsAttributeSettable(
+            focused,
+            value_attr.as_concrete_TypeRef(),
+            &mut settable,
+        );
+        let value_settable = settable_err == AX_OK && settable != 0;
+
+        // Backup signal: a text-ish role (covers fields that don't report settable).
+        let role_is_text = {
+            let role_attr = CFString::from_static_string("AXRole");
+            let mut role_ref: CFTypeRef = ptr::null();
+            let role_err = AXUIElementCopyAttributeValue(
+                focused,
+                role_attr.as_concrete_TypeRef(),
+                &mut role_ref,
+            );
+            if role_err == AX_OK && !role_ref.is_null() {
+                // CopyAttributeValue returns a +1 ref; wrap_under_create_rule frees it.
+                let role = CFString::wrap_under_create_rule(role_ref as CFStringRef).to_string();
+                matches!(
+                    role.as_str(),
+                    "AXTextField" | "AXTextArea" | "AXComboBox" | "AXSearchField"
+                )
+            } else {
+                false
+            }
+        };
+
+        CFRelease(focused as *const _);
+
+        value_settable || role_is_text
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn has_editable_focus() -> bool {
+    // On Linux/Windows we don't have this check yet; assume a paste target exists.
+    true
+}

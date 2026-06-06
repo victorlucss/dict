@@ -79,6 +79,7 @@ body {
     text-align: left;
     width: 100%;
     -webkit-app-region: no-drag;
+    transition: background 0.15s ease, color 0.15s ease;
 }
 
 .sidebar-btn:hover {
@@ -86,7 +87,7 @@ body {
 }
 
 .sidebar-btn.active {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(77, 163, 255, 0.16);
     color: #ffffff;
 }
 
@@ -101,7 +102,7 @@ body {
 }
 
 .sidebar-btn.active .icon {
-    color: #4da3ff;
+    color: #6db8ff;
 }
 
 .sidebar-btn .icon svg {
@@ -132,6 +133,16 @@ h1 {
 
 .section.hidden {
     display: none;
+}
+
+/* Each section gently fades + rises in when shown (display flips re-trigger this). */
+.section:not(.hidden) {
+    animation: section-fade 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes section-fade {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .section-desc {
@@ -251,12 +262,6 @@ textarea:focus {
     border-color: #4da3ff;
 }
 
-input[type="range"] {
-    width: 140px;
-    accent-color: #4da3ff;
-    -webkit-app-region: no-drag;
-}
-
 /* Toggle switch */
 .toggle {
     width: 38px;
@@ -295,18 +300,6 @@ input[type="range"] {
 .hint {
     font-size: 12px;
     color: rgba(235, 235, 245, 0.5);
-}
-
-.slider-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-#accuracyLabel {
-    min-width: 72px;
-    font-size: 12px;
-    color: rgba(235, 235, 245, 0.6);
 }
 
 /* Tone preset cards (LLM section) — segmented selectable cards. */
@@ -508,6 +501,7 @@ input[type="range"] {
     font-weight: 500;
     cursor: pointer;
     -webkit-app-region: no-drag;
+    transition: background 0.15s ease;
 }
 
 .btn-primary:hover {
@@ -523,6 +517,7 @@ input[type="range"] {
     font-size: 12px;
     cursor: pointer;
     -webkit-app-region: no-drag;
+    transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .btn-secondary:hover {
@@ -833,18 +828,53 @@ select.has-custom-select {
     min-width: 100%;
     display: none;
     flex-direction: column;
-    padding: 5px;
+    padding: 0;
     background: #2c2c2e;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
-    max-height: 280px;
-    overflow-y: auto;
+    max-height: 320px;
+    overflow: hidden;
     z-index: 1000;
 }
 
 .custom-select.open .custom-select-popover {
     display: flex;
+}
+
+/* Search header — fixed at the top of the popover; the list scrolls beneath it. */
+.custom-select-search {
+    padding: 6px 6px 5px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.custom-select-search-input {
+    width: 100%;
+    min-width: 0;
+    padding: 6px 9px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 7px;
+    color: #f2f2f4;
+    font-size: 13px;
+    outline: none;
+}
+
+.custom-select-search-input:focus {
+    border-color: #4da3ff;
+}
+
+.custom-select-list {
+    padding: 5px;
+    max-height: 264px;
+    overflow-y: auto;
+}
+
+.custom-select-empty {
+    padding: 14px 10px;
+    text-align: center;
+    font-size: 12px;
+    color: rgba(235, 235, 245, 0.4);
 }
 
 .custom-select-option {
@@ -904,4 +934,24 @@ select.has-custom-select {
 
 .custom-select-option.selected .custom-select-check {
     opacity: 1;
+}
+
+/* ----- Focus states (keyboard navigation) ------------------------------- */
+.sidebar-btn:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-icon:focus-visible,
+.history-copy:focus-visible,
+.tone-card:focus-visible,
+.hotkey-recorder:focus-visible,
+.toggle:focus-visible {
+    outline: 2px solid #6db8ff;
+    outline-offset: 2px;
+}
+
+/* ----- Reduced motion --------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+    .section:not(.hidden) { animation: none; }
+    .btn-ring.indeterminate svg { animation: none; }
+    .custom-select-chevron { transition: none; }
 }

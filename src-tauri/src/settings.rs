@@ -61,8 +61,6 @@ pub struct SettingsData {
     pub code_mode: bool,
     #[serde(default)]
     pub privacy_mode: bool,
-    #[serde(default)]
-    pub verbose_overlay: bool,
     #[serde(default = "default_overlay_position")]
     pub overlay_position: OverlayPosition,
     #[serde(default)]
@@ -141,7 +139,6 @@ impl Default for SettingsData {
             flow_mode: false,
             code_mode: false,
             privacy_mode: false,
-            verbose_overlay: false,
             overlay_position: default_overlay_position(),
             onboarding_done: false,
             audio_input_device: None,

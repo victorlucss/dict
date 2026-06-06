@@ -9,8 +9,6 @@ let platform = 'macos';
 // (preserve the saved model).
 let lastModelProvider = null;
 
-const ACCURACY_LABELS = { 1: 'Minimal', 2: 'Light', 3: 'Balanced', 4: 'Thorough', 5: 'Aggressive' };
-
 // Default API endpoint per LLM provider. Used both as the <input> placeholder in
 // `updateProviderFields` and as the effective endpoint in `refreshModels` when the
 // user hasn't overridden `#llmEndpoint`.
@@ -30,6 +28,9 @@ const PROVIDER_ENDPOINTS = {
 
 // Track the currently-open popover so only one is open at a time.
 let openCustomSelect = null;
+
+// Lists longer than this get an inline search box in their dropdown.
+const SEARCHABLE_MIN = 8;
 
 function closeOpenCustomSelect() {
     if (openCustomSelect) {
@@ -91,6 +92,28 @@ function enhanceSelect(selectEl) {
     popover.className = 'custom-select-popover';
     popover.setAttribute('role', 'listbox');
 
+    // Search header (shown only for long lists) + scrollable list of rows.
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'custom-select-search';
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'custom-select-search-input';
+    searchInput.placeholder = 'Search…';
+    searchInput.setAttribute('aria-label', 'Search options');
+    searchWrap.appendChild(searchInput);
+
+    const listWrap = document.createElement('div');
+    listWrap.className = 'custom-select-list';
+
+    const noResults = document.createElement('div');
+    noResults.className = 'custom-select-empty';
+    noResults.textContent = 'No matches';
+    noResults.style.display = 'none';
+
+    popover.appendChild(searchWrap);
+    popover.appendChild(listWrap);
+    popover.appendChild(noResults);
+
     root.appendChild(trigger);
     root.appendChild(popover);
 
@@ -98,6 +121,7 @@ function enhanceSelect(selectEl) {
     selectEl.parentNode.insertBefore(root, selectEl.nextSibling);
 
     let optionEls = []; // custom row elements, parallel to native options
+    let searchable = false; // true once the list is long enough to warrant search
 
     function selectByValue(value, { silent } = {}) {
         if (selectEl.value !== value) {
@@ -121,13 +145,16 @@ function enhanceSelect(selectEl) {
 
     // (Re)build the popover rows from the native <option>s.
     function rebuild() {
-        popover.innerHTML = '';
+        listWrap.innerHTML = '';
         optionEls = [];
         Array.from(selectEl.options).forEach((opt) => {
             const row = document.createElement('div');
             row.className = 'custom-select-option';
             row.setAttribute('role', 'option');
             row.dataset.value = opt.value;
+            // Lowercased haystack for filtering (label + description).
+            row.dataset.search =
+                `${opt.textContent} ${opt.dataset.desc || ''}`.toLowerCase();
             row.tabIndex = -1;
 
             if (opt.dataset.icon) {
@@ -166,10 +193,33 @@ function enhanceSelect(selectEl) {
                 trigger.focus();
             });
 
-            popover.appendChild(row);
+            listWrap.appendChild(row);
             optionEls.push(row);
         });
+        // Only long lists get a search box; short ones stay clean.
+        searchable = selectEl.options.length > SEARCHABLE_MIN;
+        searchWrap.style.display = searchable ? '' : 'none';
+        searchInput.value = '';
+        applyFilter('');
         syncFromNative();
+    }
+
+    // Show/hide rows by a case-insensitive substring of label + description.
+    function applyFilter(query) {
+        const q = (query || '').trim().toLowerCase();
+        let visible = 0;
+        optionEls.forEach((el) => {
+            const match = !q || (el.dataset.search || '').includes(q);
+            el.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+        noResults.style.display = visible === 0 ? '' : 'none';
+        activeIndex = -1;
+        optionEls.forEach((el) => el.classList.remove('active'));
+    }
+
+    function visibleEls() {
+        return optionEls.filter((el) => el.style.display !== 'none');
     }
 
     function isOpen() {
@@ -182,8 +232,14 @@ function enhanceSelect(selectEl) {
         root.classList.add('open');
         trigger.setAttribute('aria-expanded', 'true');
         openCustomSelect = controller;
+        // Long lists: reset the filter and focus the search field.
+        if (searchable) {
+            searchInput.value = '';
+            applyFilter('');
+            setTimeout(() => searchInput.focus(), 0);
+        }
         // Bring the selected row into view.
-        const sel = popover.querySelector('.custom-select-option.selected');
+        const sel = listWrap.querySelector('.custom-select-option.selected');
         if (sel) sel.scrollIntoView({ block: 'nearest' });
     }
 
@@ -203,36 +259,66 @@ function enhanceSelect(selectEl) {
         toggle();
     });
 
-    // Keyboard navigation: arrows move the highlight, Enter/Space commits.
-    let activeIndex = -1;
+    // Keyboard navigation operates over the currently-visible (filtered) rows.
+    let activeIndex = -1; // index into visibleEls(), or -1
     function setActive(i) {
-        if (!optionEls.length) return;
-        activeIndex = Math.max(0, Math.min(optionEls.length - 1, i));
-        optionEls.forEach((el, idx) => el.classList.toggle('active', idx === activeIndex));
-        optionEls[activeIndex].scrollIntoView({ block: 'nearest' });
+        const vis = visibleEls();
+        optionEls.forEach((el) => el.classList.remove('active'));
+        if (!vis.length) { activeIndex = -1; return; }
+        activeIndex = Math.max(0, Math.min(vis.length - 1, i));
+        const el = vis[activeIndex];
+        el.classList.add('active');
+        el.scrollIntoView({ block: 'nearest' });
     }
+    function commitActive() {
+        const vis = visibleEls();
+        const el = activeIndex >= 0 ? vis[activeIndex] : vis[0];
+        if (!el) return;
+        selectByValue(el.dataset.value);
+        close();
+        trigger.focus();
+    }
+    function activeForCurrentValue() {
+        const vis = visibleEls();
+        const idx = vis.findIndex((el) => el.dataset.value === selectEl.value);
+        setActive(idx >= 0 ? idx : 0);
+    }
+
     trigger.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
             if (!isOpen()) {
                 open();
-                const curIdx = optionEls.findIndex(el => el.dataset.value === selectEl.value);
-                setActive(curIdx >= 0 ? curIdx : 0);
-            } else {
+                if (!searchable) activeForCurrentValue();
+            } else if (!searchable) {
                 setActive(activeIndex + (e.key === 'ArrowDown' ? 1 : -1));
             }
         } else if (e.key === 'Enter' || e.key === ' ') {
-            if (isOpen() && activeIndex >= 0) {
+            if (isOpen() && !searchable && activeIndex >= 0) {
                 e.preventDefault();
-                selectByValue(optionEls[activeIndex].dataset.value);
-                close();
+                commitActive();
             } else if (!isOpen()) {
                 e.preventDefault();
                 open();
-                const curIdx = optionEls.findIndex(el => el.dataset.value === selectEl.value);
-                setActive(curIdx >= 0 ? curIdx : 0);
+                if (!searchable) activeForCurrentValue();
             }
         }
+    });
+
+    // Search field: live-filter, and drive nav/commit from the input itself.
+    searchInput.addEventListener('input', () => applyFilter(searchInput.value));
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setActive(activeIndex + 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActive(activeIndex <= 0 ? 0 : activeIndex - 1);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            commitActive();
+        }
+        // Escape bubbles to the document handler, which closes + refocuses.
     });
 
     const controller = { root, trigger, rebuild, sync: syncFromNative, open, close };
@@ -252,17 +338,6 @@ function rebuildCustomSelect(selectEl) {
     }
 }
 
-// Sections that use the buffered "Save" flow. The data sections (history,
-// dictionary, snippets, commands) are read-only or auto-save, so the global
-// Save button is hidden for them.
-const SAVE_SECTIONS = new Set(['general', 'speech', 'llm', 'overlay']);
-
-// Show/hide the global Save button based on the active section.
-function updateSaveVisibility(section) {
-    const actions = document.querySelector('.actions');
-    if (actions) actions.classList.toggle('hidden', !SAVE_SECTIONS.has(section));
-}
-
 // Sidebar navigation
 document.querySelectorAll('.sidebar-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -276,8 +351,6 @@ document.querySelectorAll('.sidebar-btn').forEach(btn => {
         document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
         document.getElementById(`section-${section}`).classList.remove('hidden');
 
-        updateSaveVisibility(section);
-
         // Lazy-load each section's data when it is opened
         if (section === 'speech') { refreshAudioDevices(); refreshWhisperModels(); }
         if (section === 'llm') refreshModels();
@@ -288,9 +361,22 @@ document.querySelectorAll('.sidebar-btn').forEach(btn => {
     });
 });
 
-// Accuracy slider
-document.getElementById('llmAccuracy').addEventListener('input', (e) => {
-    document.getElementById('accuracyLabel').textContent = ACCURACY_LABELS[e.target.value] || 'Balanced';
+// ----- Correction level cards --------------------------------------------
+// Five selectable cards (1–5) mapped to the `llmAccuracy` setting, mirroring the
+// tone cards. The chosen level is mirrored into the hidden #llmAccuracy input
+// that collectSettings reads.
+function setAccuracy(level) {
+    const v = String(Math.min(5, Math.max(1, parseInt(level, 10) || 3)));
+    document.getElementById('llmAccuracy').value = v;
+    document.querySelectorAll('#accuracyCards .tone-card').forEach(card => {
+        const isSel = card.dataset.level === v;
+        card.classList.toggle('selected', isSel);
+        card.setAttribute('aria-checked', isSel ? 'true' : 'false');
+    });
+}
+
+document.querySelectorAll('#accuracyCards .tone-card').forEach(card => {
+    card.addEventListener('click', () => { setAccuracy(card.dataset.level); autoSave(); });
 });
 
 // Provider changes
@@ -298,7 +384,7 @@ document.getElementById('llmProvider').addEventListener('change', updateProvider
 
 // ----- Tone preset cards --------------------------------------------------
 // Three selectable cards mapped to the `llmTone` setting. The selected value is
-// mirrored into the hidden #llmTone input that saveSettings reads.
+// mirrored into the hidden #llmTone input that collectSettings reads.
 function setTone(tone) {
     const valid = ['formal', 'casual', 'veryCasual'];
     const value = valid.includes(tone) ? tone : 'formal';
@@ -311,15 +397,33 @@ function setTone(tone) {
 }
 
 document.querySelectorAll('#toneCards .tone-card').forEach(card => {
-    card.addEventListener('click', () => setTone(card.dataset.tone));
+    card.addEventListener('click', () => { setTone(card.dataset.tone); autoSave(); });
 });
 
 // ----- Hotkey recorder ----------------------------------------------------
 // Default accelerator if the setting is missing.
 let hotkeyAccelerator = 'Alt+Space';
 let recordingHotkey = false;
+let recordingSawKey = false;   // a non-modifier key was pressed this session
+let recordingLastMod = null;   // event.code of the last modifier pressed
 
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph']);
+
+// Physical modifier keys (event.code) → bare-modifier hotkey token. A lone
+// press+release of one of these sets it as a single-key trigger (handled by the
+// native macOS monitor). Fn is NOT here — the web can't see it (use the Fn button).
+const MODIFIER_CODE_TO_TOKEN = {
+    ControlLeft: 'Control', ControlRight: 'RightControl',
+    AltLeft: 'Option', AltRight: 'RightOption',
+    MetaLeft: 'Command', MetaRight: 'RightCommand',
+    ShiftLeft: 'Shift', ShiftRight: 'RightShift',
+};
+
+// Pretty labels for the bare-modifier / Fn trigger tokens.
+const BARE_PRETTY = {
+    Fn: 'fn', Control: '⌃', RightControl: '⌃ R', Option: '⌥', RightOption: '⌥ R',
+    Command: '⌘', RightCommand: '⌘ R', Shift: '⇧', RightShift: '⇧ R',
+};
 
 const PRETTY_TOKENS = {
     CmdOrCtrl: '⌘',
@@ -334,9 +438,11 @@ const PRETTY_TOKENS = {
     Shift: '⇧',
 };
 
-// Render a Tauri accelerator string ("Alt+Space") into pretty glyphs ("⌥ Space").
+// Render a hotkey string into pretty glyphs. Combos ("Alt+Space" → "⌥ Space")
+// and bare-modifier tokens ("RightOption" → "⌥ R", "Fn" → "fn").
 function prettyAccelerator(accel) {
     if (!accel) return '';
+    if (BARE_PRETTY[accel]) return BARE_PRETTY[accel];
     return accel.split('+').map(t => PRETTY_TOKENS[t] || t).join(' ');
 }
 
@@ -407,18 +513,33 @@ function showHotkeyError(msg) {
 function startHotkeyRecording() {
     if (recordingHotkey) return;
     recordingHotkey = true;
-    showHotkeyError(null);
+    recordingSawKey = false;
+    recordingLastMod = null;
+    showHotkeyError('Press a key combo — or tap a single ⌃/⌥/⌘ for a one-key trigger. Esc to cancel.');
     const btn = document.getElementById('hotkeyRecorder');
     btn.classList.add('recording');
     document.getElementById('hotkeyDisplay').textContent = 'Press shortcut…';
     document.addEventListener('keydown', onHotkeyKeydown, true);
+    document.addEventListener('keyup', onHotkeyKeyup, true);
 }
 
 function stopHotkeyRecording() {
     recordingHotkey = false;
     document.getElementById('hotkeyRecorder').classList.remove('recording');
     document.removeEventListener('keydown', onHotkeyKeydown, true);
+    document.removeEventListener('keyup', onHotkeyKeyup, true);
+    showHotkeyError(null);
     setHotkeyDisplay();
+}
+
+// Live-preview which modifiers are held so it's clear a key is still needed
+// (pressing only a modifier like Control can't be a shortcut on its own).
+function heldModifiersPretty(e) {
+    const mods = [];
+    if (e.metaKey || e.ctrlKey) mods.push('CmdOrCtrl');
+    if (e.altKey) mods.push('Alt');
+    if (e.shiftKey) mods.push('Shift');
+    return mods.map((m) => PRETTY_TOKENS[m] || m).join(' ');
 }
 
 function onHotkeyKeydown(e) {
@@ -430,15 +551,40 @@ function onHotkeyKeydown(e) {
         stopHotkeyRecording();
         return;
     }
-    if (MODIFIER_KEYS.has(e.key)) return; // wait for a real key
+    if (MODIFIER_KEYS.has(e.key)) {
+        // Remember the physical modifier; a clean tap of it = a one-key trigger.
+        if (MODIFIER_CODE_TO_TOKEN[e.code]) recordingLastMod = e.code;
+        const pretty = heldModifiersPretty(e);
+        document.getElementById('hotkeyDisplay').textContent = pretty ? `${pretty} …` : 'Press shortcut…';
+        return; // wait for a key, or a clean release (handled in keyup)
+    }
 
+    recordingSawKey = true;
     const accel = buildAccelerator(e);
     if (!accel) {
-        showHotkeyError('Use a modifier (⌘/⌥/⌃/⇧) plus a key, or a single F-key.');
+        showHotkeyError('Add a modifier (⌘/⌥/⌃/⇧) and a key, use a single F-key, or tap one modifier on its own.');
         return;
     }
     hotkeyAccelerator = accel;
     stopHotkeyRecording();
+    autoSave();
+}
+
+function onHotkeyKeyup(e) {
+    if (!recordingHotkey) return;
+    // Only act once every modifier is released.
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+
+    // A clean tap of a single modifier (no other key pressed) → one-key trigger.
+    if (!recordingSawKey && recordingLastMod && MODIFIER_CODE_TO_TOKEN[recordingLastMod]) {
+        hotkeyAccelerator = MODIFIER_CODE_TO_TOKEN[recordingLastMod];
+        stopHotkeyRecording();
+        autoSave();
+        return;
+    }
+    // Otherwise reset the prompt (not stuck).
+    document.getElementById('hotkeyDisplay').textContent = 'Press shortcut…';
+    recordingLastMod = null;
 }
 
 document.getElementById('hotkeyRecorder').addEventListener('click', () => {
@@ -449,16 +595,87 @@ document.getElementById('hotkeyRecorder').addEventListener('click', () => {
     }
 });
 
-// Save
-document.getElementById('saveBtn').addEventListener('click', saveSettings);
+// The Fn key can't be detected via the web recorder, so set it explicitly.
+document.getElementById('hotkeyFnBtn')?.addEventListener('click', () => {
+    if (recordingHotkey) stopHotkeyRecording();
+    hotkeyAccelerator = 'Fn';
+    setHotkeyDisplay();
+    showHotkeyError(null);
+    autoSave();
+});
+
+// ----- Auto-save ----------------------------------------------------------
+// Settings persist the moment they change — there is no Save button. A
+// `settingsReady` gate suppresses the flurry of programmatic value-setting that
+// happens during init() (loadValues, refreshModels, refreshAudioDevices, …) so
+// we only persist genuine user edits.
+let settingsReady = false;
+let autoSaveTimer = null;
+
+// IDs whose `change` event maps directly to a setting. (llmProvider is handled
+// via refreshModels, which fires after the new model list is in place.)
+const AUTO_SAVE_CHANGE_IDS = [
+    'hotkeyMode', 'language', 'flowMode', 'codeMode', 'privacyMode',
+    'llmEnabled', 'llmModel', 'overlayPosition', 'audioDevice',
+];
+// Text/range inputs: debounce so we don't write on every keystroke / drag tick.
+const AUTO_SAVE_INPUT_IDS = ['llmEndpoint', 'llmApiKey'];
+
+function collectSettings() {
+    return {
+        hotkey: hotkeyAccelerator,
+        hotkeyMode: document.getElementById('hotkeyMode').value,
+        whisperModelPath: document.getElementById('whisperModelPath').value,
+        whisperLanguage: document.getElementById('language').value,
+        llmEnabled: document.getElementById('llmEnabled').checked,
+        llmEndpoint: document.getElementById('llmEndpoint').value,
+        llmModel: document.getElementById('llmModel').value,
+        llmApiKey: document.getElementById('llmApiKey').value,
+        llmProvider: document.getElementById('llmProvider').value,
+        llmTone: document.getElementById('llmTone').value,
+        llmAccuracy: parseInt(document.getElementById('llmAccuracy').value),
+        flowMode: document.getElementById('flowMode').checked,
+        codeMode: document.getElementById('codeMode').checked,
+        privacyMode: document.getElementById('privacyMode').checked,
+        overlayPosition: document.getElementById('overlayPosition').value,
+        onboardingDone: currentSettings?.onboardingDone ?? true,
+        audioInputDevice: getSelectedAudioDevice(),
+    };
+}
+
+// Persist the current form state immediately. Keeps the window open; surfaces a
+// rejected (e.g. invalid hotkey) save inline near the hotkey recorder.
+async function autoSave() {
+    if (!settingsReady) return;
+    const data = collectSettings();
+    try {
+        showHotkeyError(null);
+        await invoke('save_settings', { data });
+        currentSettings = data;
+    } catch (e) {
+        console.error('Failed to save settings:', e);
+        showHotkeyError("Couldn't save — " + (typeof e === 'string' ? e : (e?.message || 'those settings look invalid.')));
+    }
+}
+
+function autoSaveDebounced() {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(autoSave, 350);
+}
+
+function wireAutoSave() {
+    AUTO_SAVE_CHANGE_IDS.forEach(id => {
+        document.getElementById(id)?.addEventListener('change', autoSave);
+    });
+    AUTO_SAVE_INPUT_IDS.forEach(id => {
+        document.getElementById(id)?.addEventListener('input', autoSaveDebounced);
+    });
+}
 
 async function init() {
     platform = await invoke('get_platform');
     currentSettings = await invoke('get_settings');
     loadValues(currentSettings);
-    // Default section is General (a Save section), so show the Save button.
-    const activeBtn = document.querySelector('.sidebar-btn.active');
-    updateSaveVisibility(activeBtn ? activeBtn.dataset.section : 'general');
     // Enhance the native selects with custom Codex-style dropdowns. Done after
     // loadValues so each select already reflects the saved value when built.
     ['hotkeyMode', 'language', 'llmProvider', 'llmModel', 'overlayPosition', 'audioDevice', 'whisperModelSelect']
@@ -475,6 +692,9 @@ async function init() {
     // Populate the mic dropdown and select the saved device up front so the
     // selection is correct even before the Speech section is opened.
     await refreshAudioDevices();
+    // All controls now reflect saved state; arm auto-save for real user edits.
+    wireAutoSave();
+    settingsReady = true;
 }
 
 function loadValues(s) {
@@ -491,8 +711,7 @@ function loadValues(s) {
     document.getElementById('whisperModelPath').value = s.whisperModelPath || '';
 
     document.getElementById('llmEnabled').checked = s.llmEnabled;
-    document.getElementById('llmAccuracy').value = s.llmAccuracy;
-    document.getElementById('accuracyLabel').textContent = ACCURACY_LABELS[s.llmAccuracy] || 'Balanced';
+    setAccuracy(s.llmAccuracy);
     document.getElementById('llmProvider').value = s.llmProvider;
     // #llmModel is now a <select>; ensure the saved model exists as an option so
     // it displays before refreshModels() repopulates the list from the endpoint.
@@ -508,7 +727,6 @@ function loadValues(s) {
     document.getElementById('llmApiKey').value = s.llmApiKey;
     setTone(s.llmTone || 'formal');
 
-    document.getElementById('verboseOverlay').checked = s.verboseOverlay;
     document.getElementById('overlayPosition').value = s.overlayPosition;
 }
 
@@ -583,41 +801,8 @@ async function refreshModels() {
 
     lastModelProvider = provider;
     rebuildCustomSelect(select);
-}
-
-async function saveSettings() {
-    const data = {
-        hotkey: hotkeyAccelerator,
-        hotkeyMode: document.getElementById('hotkeyMode').value,
-        whisperModelPath: document.getElementById('whisperModelPath').value,
-        whisperLanguage: document.getElementById('language').value,
-        llmEnabled: document.getElementById('llmEnabled').checked,
-        llmEndpoint: document.getElementById('llmEndpoint').value,
-        llmModel: document.getElementById('llmModel').value,
-        llmApiKey: document.getElementById('llmApiKey').value,
-        llmProvider: document.getElementById('llmProvider').value,
-        llmTone: document.getElementById('llmTone').value,
-        llmAccuracy: parseInt(document.getElementById('llmAccuracy').value),
-        flowMode: document.getElementById('flowMode').checked,
-        codeMode: document.getElementById('codeMode').checked,
-        privacyMode: document.getElementById('privacyMode').checked,
-        verboseOverlay: document.getElementById('verboseOverlay').checked,
-        overlayPosition: document.getElementById('overlayPosition').value,
-        onboardingDone: currentSettings?.onboardingDone ?? true,
-        audioInputDevice: getSelectedAudioDevice(),
-    };
-
-    try {
-        showHotkeyError(null);
-        await invoke('save_settings', { data });
-        // Close the window
-        const { getCurrentWindow } = window.__TAURI__.window;
-        getCurrentWindow().close();
-    } catch (e) {
-        console.error('Failed to save settings:', e);
-        // Surface invalid-hotkey rejections inline and keep the window open.
-        showHotkeyError('Could not save: ' + (typeof e === 'string' ? e : (e?.message || 'invalid settings.')));
-    }
+    // A provider switch lands here with the new model already selected; persist it.
+    autoSave();
 }
 
 // Returns the value to persist for the selected mic. The backend treats both
@@ -664,7 +849,7 @@ async function refreshAudioDevices() {
 // `download_whisper_model` (resolves to the local path; emits
 // `whisper-download-progress` events while running). The custom dropdown lists
 // every catalog model; the selected model is either Ready (downloaded — its
-// `path` is mirrored into the hidden #whisperModelPath that saveSettings reads)
+// `path` is mirrored into the hidden #whisperModelPath that collectSettings reads)
 // or offers a Download button + progress bar.
 
 let whisperModels = [];      // [{ name, filename, size, downloaded, path }]
@@ -732,7 +917,7 @@ function selectedWhisperModel() {
 }
 
 // Reflect the selected model's state into the status UI + hidden path field.
-// Downloaded => mirror its path into #whisperModelPath (what saveSettings sends)
+// Downloaded => mirror its path into #whisperModelPath (what collectSettings sends)
 // and show "Ready". Not downloaded => show the Download button with its size.
 function updateWhisperModelUI() {
     const ready = document.getElementById('whisperReady');
@@ -875,10 +1060,12 @@ async function downloadSelectedWhisperModel() {
         downloadingModel = null;
         // Re-fetch the catalog so statuses are authoritative, keeping selection.
         await refreshWhisperModels();
+        // The freshly downloaded model is now active — persist its path.
+        autoSave();
     } catch (e) {
         console.error('Failed to download Whisper model:', e);
         downloadingModel = null;
-        showWhisperError('Download failed: ' + (typeof e === 'string' ? e : (e?.message || 'unknown error')));
+        showWhisperError("Download didn't finish — " + (typeof e === 'string' ? e : (e?.message || 'something went wrong. Try again.')));
         resetWhisperDownloadButton();
         updateWhisperModelUI();
     }
@@ -904,9 +1091,11 @@ async function deleteSelectedWhisperModel() {
         const stillDownloaded = whisperModels.find(m => m.downloaded);
         rebuildWhisperOptions(stillDownloaded ? stillDownloaded.name : model.name);
         updateWhisperModelUI();
+        // Active model/path may have changed (cleared or moved); persist it.
+        autoSave();
     } catch (e) {
         console.error('Failed to delete Whisper model:', e);
-        showWhisperError('Delete failed: ' + (typeof e === 'string' ? e : (e?.message || 'unknown error')));
+        showWhisperError("Couldn't delete that model — " + (typeof e === 'string' ? e : (e?.message || 'something went wrong. Try again.')));
         delBtn.disabled = false;
         updateWhisperModelUI();
     }
@@ -918,6 +1107,8 @@ function setupWhisperModelManager() {
     document.getElementById('whisperModelSelect')?.addEventListener('change', () => {
         showWhisperError(null);
         updateWhisperModelUI();
+        // Selecting a downloaded model switches the active model path; persist it.
+        autoSave();
     });
     document.getElementById('whisperDownloadBtn')?.addEventListener('click', downloadSelectedWhisperModel);
     document.getElementById('whisperDeleteBtn')?.addEventListener('click', deleteSelectedWhisperModel);
@@ -985,7 +1176,8 @@ async function loadHistory() {
         list.innerHTML = '';
         // Show only the transcription text + a copy button. App/engine/timestamp
         // are still persisted by the backend, just not displayed here.
-        entries.forEach(entry => {
+        // Stored oldest-first; render newest-first so the latest is on top.
+        entries.slice().reverse().forEach(entry => {
             const item = document.createElement('div');
             item.className = 'history-item';
 

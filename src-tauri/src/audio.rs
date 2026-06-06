@@ -138,10 +138,28 @@ impl AudioCapture {
                             .collect()
                     };
 
-                    // RMS audio level calculation (match Swift: sqrt(rms * 20.0))
+                    // Reactive level meter: blend RMS (body) with peak (snappy
+                    // transients) so the wave actually dances with the voice
+                    // instead of pinning at max. Tune the gains to taste.
+                    let n = mono_samples.len().max(1) as f32;
                     let sum: f32 = mono_samples.iter().map(|s| s * s).sum();
-                    let rms = (sum / mono_samples.len().max(1) as f32).sqrt();
-                    let normalized = (rms * 20.0).min(1.0).sqrt().min(1.0);
+                    let rms = (sum / n).sqrt();
+                    let peak = mono_samples
+                        .iter()
+                        .fold(0.0_f32, |m, &s| m.max(s.abs()));
+                    // Sensitive but gated: high RMS-weighted gain so the bars react
+                    // strongly to speech, with a small noise gate below which the
+                    // bars rest flat (background hum/room tone). RMS-dominant so
+                    // background peak spikes (clicks/breaths) don't leak through.
+                    // Tunable: raise GATE if idle noise shows; raise gains for more
+                    // sensitivity.
+                    let raw = rms * 46.0 + peak * 8.0;
+                    const GATE: f32 = 0.10;
+                    let normalized = if raw <= GATE {
+                        0.0
+                    } else {
+                        ((raw - GATE) / (1.0 - GATE)).min(1.0)
+                    };
 
                     if let Ok(cb) = level_cb.lock() {
                         if let Some(ref callback) = *cb {

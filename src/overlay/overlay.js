@@ -1,13 +1,19 @@
 const { listen } = window.__TAURI__.event;
 
-const DOT_COUNT = 10;
-const MIN_SCALE = 0.57;  // minRadius/maxRadius = 2/3.5
-const MAX_SCALE = 1.0;
+const DOT_COUNT = 8;
+const MIN_SCALE = 0.8;   // quiet → dots stay visible as a resting baseline
+const MAX_SCALE = 2.4;   // loud  → dots grow well past base size (dramatic motion)
 
 let isProcessing = false;
 let processingPhase = 0;
 let processingInterval = null;
-let verbose = false;
+
+// Smoothed level envelope: the raw audio level sets `targetLevel`; `displayLevel`
+// eases toward it every frame (quick attack, gentle release) so the bars glide
+// up and down instead of snapping. `phase` drives a subtle per-dot undulation.
+let targetLevel = 0;
+let displayLevel = 0;
+let phase = 0;
 
 // Create dots
 const dotsContainer = document.getElementById('dots');
@@ -19,29 +25,29 @@ for (let i = 0; i < DOT_COUNT; i++) {
 const dots = dotsContainer.querySelectorAll('.dot');
 
 const overlay = document.getElementById('overlay');
-const label = document.getElementById('label');
 
-// Listen for audio level updates
+// Listen for audio level updates — just update the target; the rAF loop eases to it.
 listen('audio-level', (event) => {
     if (isProcessing) return;
-    const level = Math.max(0, Math.min(1, event.payload));
-    updateDots(level);
+    targetLevel = Math.max(0, Math.min(1, event.payload));
 });
 
-// Listen for the 15s-cutoff warning (emitted at 12s, 3s before the hard limit)
-listen('recording-warning', () => {
-    overlay.classList.add('warning');
-});
+// Animation loop: ease displayLevel toward targetLevel (fast up, soft down) and
+// render with a gentle undulation so the bars feel alive rather than sharp.
+function animate() {
+    if (!isProcessing) {
+        const factor = targetLevel > displayLevel ? 0.3 : 0.12;
+        displayLevel += (targetLevel - displayLevel) * factor;
+        phase += 0.16;
+        renderDots(displayLevel, phase);
+    }
+    requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
 
 // Listen for state changes
 listen('overlay-state', (event) => {
     const state = event.payload;
-
-    if (state.verbose !== undefined) {
-        verbose = state.verbose;
-        overlay.classList.toggle('verbose', verbose);
-        label.style.display = verbose ? 'block' : 'none';
-    }
 
     if (state.warning !== undefined) {
         overlay.classList.toggle('warning', !!state.warning);
@@ -50,26 +56,28 @@ listen('overlay-state', (event) => {
     // A fresh recording / overlay show clears any previous warning state.
     if (state.recording) {
         overlay.classList.remove('warning');
+        targetLevel = 0;
+        displayLevel = 0;
         stopProcessing();
     }
 
     if (state.processing) {
         startProcessing();
-        if (verbose) label.textContent = 'Processing...';
-    }
-
-    if (state.text && verbose) {
-        label.textContent = state.text;
     }
 });
 
-function updateDots(level) {
-    const center = DOT_COUNT / 2;
+function renderDots(level, ph) {
+    const center = (DOT_COUNT - 1) / 2;
     dots.forEach((dot, i) => {
         const distance = Math.abs(i - center) / center;
-        const dotLevel = level * (1.0 - distance * 0.6);
+        // Lighter center-bias so the outer dots react too.
+        let dotLevel = level * (1.0 - distance * 0.35);
+        // Subtle per-dot undulation (scaled by level) so the bars gently move
+        // up and down while active instead of sitting flat-topped.
+        dotLevel += Math.sin(ph + i * 0.7) * 0.09 * level;
+        dotLevel = Math.max(0, Math.min(1, dotLevel));
         const scale = MIN_SCALE + dotLevel * (MAX_SCALE - MIN_SCALE);
-        const opacity = 0.3 + dotLevel * 0.7;
+        const opacity = 0.35 + dotLevel * 0.65;
         dot.style.transform = `scale(${scale})`;
         dot.style.opacity = opacity;
     });

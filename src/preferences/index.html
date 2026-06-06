@@ -68,35 +68,36 @@
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Hotkey</div>
-                            <div class="setting-desc">The global shortcut that starts and stops dictation.</div>
+                            <div class="setting-desc">The shortcut you press anywhere to start and stop dictating.</div>
                         </div>
                         <div class="setting-control">
                             <button type="button" id="hotkeyRecorder" class="hotkey-recorder">
                                 <span id="hotkeyDisplay">⌥ Space</span>
                             </button>
+                            <button type="button" id="hotkeyFnBtn" class="btn-secondary" title="Use the Fn key as the trigger">fn</button>
                             <div class="control-error hidden" id="hotkeyError"></div>
                         </div>
                     </div>
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Hotkey Mode</div>
-                            <div class="setting-desc">Toggle starts on one press and stops on the next. Push to talk records only while you hold the shortcut.</div>
+                            <div class="setting-desc">Toggle: tap once to start, tap again to stop. Push to talk: record only while you hold the key down.</div>
                         </div>
                         <div class="setting-control">
                             <select id="hotkeyMode">
-                                <option value="toggle" data-desc="Press once to start, again to stop">Toggle</option>
-                                <option value="pushToTalk" data-desc="Hold to record, release to stop">Push to Talk</option>
+                                <option value="toggle" data-desc="Tap to start, tap again to stop">Toggle</option>
+                                <option value="pushToTalk" data-desc="Hold to record, let go to stop">Push to Talk</option>
                             </select>
                         </div>
                     </div>
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Language</div>
-                            <div class="setting-desc">Spoken language for transcription. Auto-detect lets Whisper identify it from your voice.</div>
+                            <div class="setting-desc">The language you'll speak. Not sure? Leave it on Auto-detect and Dict will figure it out from your voice.</div>
                         </div>
                         <div class="setting-control">
                             <select id="language">
-                                <option value="auto" data-desc="Detects the language from your voice">Auto-detect</option>
+                                <option value="auto" data-desc="We'll pick it up as you speak">Auto-detect</option>
                                 <option value="en" data-desc="English">English</option>
                                 <option value="pt" data-desc="Brazilian Portuguese">Português (Brasil)</option>
                             </select>
@@ -105,7 +106,7 @@
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Flow Mode</div>
-                            <div class="setting-desc">Automatically press Return after pasting, so dictated messages send themselves.</div>
+                            <div class="setting-desc">Press Return for you after pasting — handy for firing off chat messages hands-free.</div>
                         </div>
                         <div class="setting-control">
                             <input type="checkbox" id="flowMode" class="toggle">
@@ -114,7 +115,7 @@
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Code Mode</div>
-                            <div class="setting-desc">Tunes formatting for code — preserves symbols, casing, and inline syntax.</div>
+                            <div class="setting-desc">Keeps symbols, casing, and syntax intact when you're dictating code.</div>
                         </div>
                         <div class="setting-control">
                             <input type="checkbox" id="codeMode" class="toggle">
@@ -123,7 +124,7 @@
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Privacy Mode</div>
-                            <div class="setting-desc">Never sends transcriptions to cloud LLMs and stops saving history to disk.</div>
+                            <div class="setting-desc">Keeps everything on your Mac — nothing goes to cloud LLMs, and your history isn't saved.</div>
                         </div>
                         <div class="setting-control">
                             <input type="checkbox" id="privacyMode" class="toggle">
@@ -138,10 +139,10 @@
                     <div class="setting-row setting-row-stacked" id="whisperModelRow">
                         <div class="setting-info">
                             <div class="setting-title">Whisper Model</div>
-                            <div class="setting-desc">The GGML model used for transcription. Larger models are more accurate but slower and bigger.</div>
+                            <div class="setting-desc">The model that turns your speech into text. Bigger ones hear you more accurately, but take more space and run slower.</div>
                         </div>
                         <div class="setting-control setting-control-full whisper-model-control">
-                            <!-- Hidden field saveSettings() reads: full local path of the selected (downloaded) model. -->
+                            <!-- Hidden field collectSettings() reads: full local path of the selected (downloaded) model. -->
                             <input type="hidden" id="whisperModelPath">
                             <select id="whisperModelSelect"></select>
                             <div class="whisper-model-status" id="whisperModelStatus">
@@ -165,7 +166,7 @@
                     <div class="setting-row" id="micDeviceRow">
                         <div class="setting-info">
                             <div class="setting-title">Microphone</div>
-                            <div class="setting-desc">Input device used to capture your voice. System Default follows your macOS sound settings.</div>
+                            <div class="setting-desc">Which mic Dict listens to. System Default follows your macOS sound settings.</div>
                         </div>
                         <div class="setting-control">
                             <select id="audioDevice">
@@ -181,42 +182,63 @@
                 <div class="card">
                     <div class="setting-row">
                         <div class="setting-info">
-                            <div class="setting-title">Enable LLM cleanup</div>
-                            <div class="setting-desc">Run transcriptions through an LLM to fix grammar, punctuation, and remove filler words.</div>
+                            <div class="setting-title">Clean up with an LLM</div>
+                            <div class="setting-desc">Polish each transcription with an LLM — tidying grammar and punctuation and trimming filler like "um" and "you know".</div>
                         </div>
                         <div class="setting-control">
                             <input type="checkbox" id="llmEnabled" class="toggle">
                         </div>
                     </div>
-                    <div class="setting-row">
+                    <div class="setting-row setting-row-stacked">
                         <div class="setting-info">
                             <div class="setting-title">Correction level</div>
-                            <div class="setting-desc">How aggressively the LLM rewrites — from light punctuation fixes to full cleanup.</div>
+                            <div class="setting-desc">How much the LLM reshapes your words — from a light touch-up to a full rewrite.</div>
                         </div>
-                        <div class="setting-control slider-group">
-                            <input type="range" id="llmAccuracy" min="1" max="5" step="1" value="3">
-                            <span id="accuracyLabel">Balanced</span>
+                        <div class="setting-control setting-control-full">
+                            <input type="hidden" id="llmAccuracy" value="3">
+                            <div class="tone-cards" id="accuracyCards" role="radiogroup" aria-label="Correction level">
+                                <button type="button" class="tone-card" data-level="1" role="radio" aria-checked="false">
+                                    <span class="tone-card-title">Minimal</span>
+                                    <span class="tone-card-desc">Punctuation</span>
+                                </button>
+                                <button type="button" class="tone-card" data-level="2" role="radio" aria-checked="false">
+                                    <span class="tone-card-title">Light</span>
+                                    <span class="tone-card-desc">Quick tidy</span>
+                                </button>
+                                <button type="button" class="tone-card" data-level="3" role="radio" aria-checked="true">
+                                    <span class="tone-card-title">Balanced</span>
+                                    <span class="tone-card-desc">Recommended</span>
+                                </button>
+                                <button type="button" class="tone-card" data-level="4" role="radio" aria-checked="false">
+                                    <span class="tone-card-title">Thorough</span>
+                                    <span class="tone-card-desc">Polished</span>
+                                </button>
+                                <button type="button" class="tone-card" data-level="5" role="radio" aria-checked="false">
+                                    <span class="tone-card-title">Aggressive</span>
+                                    <span class="tone-card-desc">Full rewrite</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Provider</div>
-                            <div class="setting-desc">Which LLM service runs the cleanup. Local providers keep data on your machine.</div>
+                            <div class="setting-desc">Who runs the cleanup. Local options keep your words on your Mac.</div>
                         </div>
                         <div class="setting-control">
                             <select id="llmProvider">
-                                <option value="openai" data-desc="Cloud — GPT models via OpenAI API">OpenAI</option>
-                                <option value="anthropic" data-desc="Cloud — Claude models via Anthropic API">Anthropic</option>
-                                <option value="openrouter" data-desc="Cloud — many models via OpenRouter">OpenRouter</option>
-                                <option value="ollama" data-desc="Local — runs models on your machine">Ollama (local)</option>
-                                <option value="lmstudio" data-desc="Local — runs models on your machine">LM Studio (local)</option>
+                                <option value="openai" data-desc="Cloud — GPT models from OpenAI">OpenAI</option>
+                                <option value="anthropic" data-desc="Cloud — Claude models from Anthropic">Anthropic</option>
+                                <option value="openrouter" data-desc="Cloud — lots of models in one place">OpenRouter</option>
+                                <option value="ollama" data-desc="Local — runs right on your Mac">Ollama (local)</option>
+                                <option value="lmstudio" data-desc="Local — runs right on your Mac">LM Studio (local)</option>
                             </select>
                         </div>
                     </div>
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Model</div>
-                            <div class="setting-desc">Name of the model to call, as expected by the selected provider.</div>
+                            <div class="setting-desc">Which model to use. Pick one from the list, or type the exact name your provider expects.</div>
                         </div>
                         <div class="setting-control">
                             <select id="llmModel"></select>
@@ -225,7 +247,7 @@
                     <div class="setting-row" id="endpointRow">
                         <div class="setting-info">
                             <div class="setting-title">Endpoint</div>
-                            <div class="setting-desc">API URL requests are sent to. Set automatically from the chosen provider.</div>
+                            <div class="setting-desc">Where requests are sent. Filled in automatically for your provider — only change it if you know you need to.</div>
                         </div>
                         <div class="setting-control">
                             <input type="text" id="llmEndpoint" placeholder="http://localhost:11434/v1/chat/completions" disabled>
@@ -234,7 +256,7 @@
                     <div class="setting-row" id="apiKeyRow">
                         <div class="setting-info">
                             <div class="setting-title">API Key</div>
-                            <div class="setting-desc">Secret key used to authenticate with the cloud provider.</div>
+                            <div class="setting-desc">Your key for the cloud provider. Kept on your Mac and only sent to them.</div>
                         </div>
                         <div class="setting-control">
                             <input type="password" id="llmApiKey" placeholder="sk-…">
@@ -243,22 +265,22 @@
                     <div class="setting-row setting-row-stacked">
                         <div class="setting-info">
                             <div class="setting-title">Tone</div>
-                            <div class="setting-desc">How the LLM shapes capitalization and punctuation in the final text.</div>
+                            <div class="setting-desc">How polished the final text reads — pick the vibe that fits you.</div>
                         </div>
                         <div class="setting-control setting-control-full">
                             <input type="hidden" id="llmTone" value="formal">
                             <div class="tone-cards" id="toneCards" role="radiogroup" aria-label="Tone">
                                 <button type="button" class="tone-card" data-tone="formal" role="radio" aria-checked="true">
                                     <span class="tone-card-title">Formal</span>
-                                    <span class="tone-card-desc">Caps + punctuation</span>
+                                    <span class="tone-card-desc">Capitals & full punctuation</span>
                                 </button>
                                 <button type="button" class="tone-card" data-tone="casual" role="radio" aria-checked="false">
                                     <span class="tone-card-title">Casual</span>
-                                    <span class="tone-card-desc">Caps + less punctuation</span>
+                                    <span class="tone-card-desc">Capitals, lighter punctuation</span>
                                 </button>
                                 <button type="button" class="tone-card" data-tone="veryCasual" role="radio" aria-checked="false">
                                     <span class="tone-card-title">Very casual</span>
-                                    <span class="tone-card-desc">No caps + less punctuation</span>
+                                    <span class="tone-card-desc">lowercase, minimal punctuation</span>
                                 </button>
                             </div>
                         </div>
@@ -271,22 +293,13 @@
                 <div class="card">
                     <div class="setting-row">
                         <div class="setting-info">
-                            <div class="setting-title">Verbose Overlay</div>
-                            <div class="setting-desc">Show extra status detail in the recording HUD, such as the active engine and stages.</div>
-                        </div>
-                        <div class="setting-control">
-                            <input type="checkbox" id="verboseOverlay" class="toggle">
-                        </div>
-                    </div>
-                    <div class="setting-row">
-                        <div class="setting-info">
                             <div class="setting-title">Overlay Position</div>
-                            <div class="setting-desc">Where the recording HUD appears on screen while you dictate.</div>
+                            <div class="setting-desc">Where the recording bubble sits while you talk.</div>
                         </div>
                         <div class="setting-control">
                             <select id="overlayPosition">
-                                <option value="top" data-desc="Show the HUD near the top of the screen">Top</option>
-                                <option value="bottom" data-desc="Show the HUD near the bottom of the screen">Bottom</option>
+                                <option value="top" data-desc="Near the top of the screen">Top</option>
+                                <option value="bottom" data-desc="Near the bottom of the screen">Bottom</option>
                             </select>
                         </div>
                     </div>
@@ -295,13 +308,13 @@
 
             <!-- History Section -->
             <div class="section hidden" id="section-history">
-                <p class="section-desc">Recent transcriptions captured on this device. History is not saved while Privacy Mode is on.</p>
+                <p class="section-desc">Your recent transcriptions, kept right here on this device. Nothing's saved while Privacy Mode is on.</p>
                 <div class="history-list" id="historyList"></div>
             </div>
 
             <!-- Dictionary Section -->
             <div class="section hidden" id="section-dictionary">
-                <p class="section-desc">Words the transcriber should recognize and spell correctly, like names and jargon.</p>
+                <p class="section-desc">Teach Dict the words it tends to miss — names, jargon, acronyms — so it spells them right every time.</p>
                 <div class="card">
                     <div class="add-row">
                         <input type="text" id="dictionaryInput" placeholder="Add a word…">
@@ -313,7 +326,7 @@
 
             <!-- Snippets Section -->
             <div class="section hidden" id="section-snippets">
-                <p class="section-desc">Type a trigger phrase to expand it into a longer piece of snippet text.</p>
+                <p class="section-desc">Say a short trigger and Dict expands it into the full text — signatures, addresses, boilerplate.</p>
                 <div class="card">
                     <div class="add-row">
                         <input type="text" id="snippetTriggerInput" placeholder="Trigger">
@@ -326,7 +339,7 @@
 
             <!-- Voice Commands Section -->
             <div class="section hidden" id="section-commands">
-                <p class="section-desc">Say a trigger phrase to fire a key combination, like <code>cmd+s</code> to save.</p>
+                <p class="section-desc">Say a phrase to fire a keyboard shortcut — like "save it" to press <code>cmd+s</code>.</p>
                 <div class="card">
                     <div class="add-row">
                         <input type="text" id="commandTriggerInput" placeholder="Trigger phrase">
@@ -335,10 +348,6 @@
                     </div>
                     <div class="editor-list" id="commandsList"></div>
                 </div>
-            </div>
-
-            <div class="actions">
-                <button id="saveBtn" class="btn-primary">Save</button>
             </div>
         </main>
     </div>

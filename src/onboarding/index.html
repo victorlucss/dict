@@ -8,14 +8,31 @@
 </head>
 <body>
     <div class="wizard">
-        <div class="wizard-icon" id="stepIcon">🎙</div>
-        <h1 id="stepTitle">Welcome to Dict</h1>
-        <p id="stepDescription">Dict converts your voice to text using a global hotkey.<br>Press Option+Space anywhere to start dictating.</p>
-        <div class="wizard-actions">
-            <button id="primaryBtn" class="btn-primary">Get Started</button>
-            <button id="secondaryBtn" class="btn-secondary" style="display:none;">Use Whisper</button>
+        <div class="wizard-progress" aria-hidden="true"><div class="wizard-progress-fill" id="wizardProgress"></div></div>
+        <div class="wizard-step">
+            <div class="wizard-icon" id="stepIcon" aria-hidden="true"></div>
+            <h1 id="stepTitle"></h1>
+            <p id="stepDescription"></p>
+
+            <!-- Model picker (shown only on the model step) -->
+            <div class="model-picker hidden" id="modelPicker">
+                <div class="model-list" id="modelList"></div>
+                <div class="model-action" id="modelAction"></div>
+            </div>
+
+            <!-- Try-it result (shown only on the try-it step) -->
+            <div class="tryit hidden" id="tryitBox">
+                <div class="tryit-result" id="tryitResult" data-empty="true">Your words will land right here.</div>
+            </div>
         </div>
-        <div id="stepIndicator" class="step-indicator">1 of 5</div>
+
+        <div class="wizard-footer">
+            <div class="wizard-actions">
+                <button id="secondaryBtn" class="btn-text" style="display:none;"></button>
+                <button id="primaryBtn" class="btn-primary"></button>
+            </div>
+            <div id="stepIndicator" class="step-indicator"></div>
+        </div>
     </div>
     <script src="onboarding.js"></script>
 </body>

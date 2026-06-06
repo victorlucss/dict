@@ -676,10 +676,13 @@ dependencies = [
 
 [[package]]
 name = "dict"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "arboard",
+ "block2 0.6.2",
  "chrono",
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
  "cpal",
  "dirs",
  "enigo",

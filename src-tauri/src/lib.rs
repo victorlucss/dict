@@ -29,9 +29,9 @@ pub struct AppState {
     pub audio_capture: Mutex<AudioCapture>,
     pub is_recording: Mutex<bool>,
     pub recording_stopped_at: Mutex<Option<Instant>>,
-    /// Incremented on each recording start so a stale auto-stop timer
-    /// from a previous recording can't stop a newer one.
-    pub recording_generation: Mutex<u64>,
+    /// Transcription staged for the copy-fallback popup to fetch on load (set when
+    /// a paste fails). Taken (cleared) by `get_fallback_text`.
+    pub fallback_text: Mutex<Option<String>>,
 }
 
 // ─── Tauri Commands ─────────────────────────────────────
@@ -65,10 +65,17 @@ fn save_settings(
         let handler = |app: &AppHandle, _sc: &_, event: tauri_plugin_global_shortcut::ShortcutEvent| {
             handle_hotkey_event(app, event.state);
         };
-        if let Err(e) = gs.on_shortcut(new_hotkey.as_str(), handler) {
-            return Err(format!("Invalid shortcut \"{}\": {}", new_hotkey, e));
+        // Register the new accelerator first (so an invalid one is rejected before
+        // we drop the old). Bare modifiers / Fn aren't registered here — the native
+        // monitor handles them by reading the saved setting below.
+        if !is_bare_modifier(&new_hotkey) {
+            if let Err(e) = gs.on_shortcut(new_hotkey.as_str(), handler) {
+                return Err(format!("Invalid shortcut \"{}\": {}", new_hotkey, e));
+            }
         }
-        let _ = gs.unregister(old_hotkey.as_str());
+        if !is_bare_modifier(&old_hotkey) {
+            let _ = gs.unregister(old_hotkey.as_str());
+        }
         tracing::info!("Hotkey changed: {} → {}", old_hotkey, new_hotkey);
     }
 
@@ -217,7 +224,9 @@ fn open_config_file(name: String) {
 // ─── Window Management ──────────────────────────────────
 
 fn open_preferences(app: &AppHandle) {
+    tracing::info!("open_preferences called");
     if let Some(win) = app.get_webview_window("preferences") {
+        win.show().ok();
         win.set_focus().ok();
         return;
     }
@@ -269,7 +278,7 @@ fn open_onboarding(app: &AppHandle) {
         WebviewUrl::App("onboarding/index.html".into()),
     )
     .title("Dict Setup")
-    .inner_size(480.0, 340.0)
+    .inner_size(560.0, 660.0)
     .resizable(false)
     .center()
     .build()
@@ -291,17 +300,13 @@ fn show_overlay(app: &AppHandle) {
         return;
     }
 
-    let (verbose, position) = {
+    let position = {
         let state = app.state::<AppState>();
         let s = state.settings.lock().unwrap();
-        (s.data.verbose_overlay, s.data.overlay_position.clone())
+        s.data.overlay_position.clone()
     };
 
-    let (width, height) = if verbose {
-        (220.0, 60.0)
-    } else {
-        (140.0, 44.0)
-    };
+    let (width, height) = (72.0, 28.0);
 
     let mut builder = WebviewWindowBuilder::new(
         app,
@@ -331,7 +336,7 @@ fn show_overlay(app: &AppHandle) {
         let x = (screen_w - width) / 2.0;
         let y = match position {
             settings::OverlayPosition::Top => 60.0,
-            settings::OverlayPosition::Bottom => screen_h - height - 80.0,
+            settings::OverlayPosition::Bottom => screen_h - height - 12.0,
         };
         builder = builder.position(x, y);
     } else {
@@ -351,11 +356,6 @@ fn show_overlay(app: &AppHandle) {
                     let _: () = msg_send![&*ns_win, setIgnoresMouseEvents: true];
                 }
             }
-
-            let _ = win.emit(
-                "overlay-state",
-                serde_json::json!({ "verbose": verbose }),
-            );
 
             // Restore focus to the app the user was in before the overlay appeared
             #[cfg(target_os = "macos")]
@@ -390,6 +390,101 @@ fn show_accessibility_alert(_app: &AppHandle) {
         .spawn();
 }
 
+/// Command: the copy-fallback popup pulls (and clears) its transcription on load.
+#[tauri::command]
+fn get_fallback_text(state: tauri::State<'_, AppState>) -> String {
+    state
+        .fallback_text
+        .lock()
+        .ok()
+        .and_then(|mut t| t.take())
+        .unwrap_or_default()
+}
+
+/// Show the copy-fallback popup with `text`. Called when a paste fails so the user
+/// can still grab the transcription. Stages the text for the window to fetch, then
+/// either refreshes an existing popup (restarting its countdown) or builds one.
+fn show_fallback(app: &AppHandle, text: &str) {
+    {
+        let state = app.state::<AppState>();
+        let guard = state.fallback_text.lock();
+        if let Ok(mut t) = guard {
+            *t = Some(text.to_string());
+        }
+    }
+
+    // Already open: refresh its text + restart its countdown, don't rebuild.
+    if let Some(win) = app.get_webview_window("fallback") {
+        let _ = win.emit("fallback-show", text);
+        return;
+    }
+
+    // Window creation must run on the main thread (we may be on the LLM thread).
+    let app2 = app.clone();
+    let _ = app.run_on_main_thread(move || build_fallback_window(&app2));
+}
+
+fn build_fallback_window(app: &AppHandle) {
+    let width = 360.0;
+    let height = 140.0;
+
+    let mut builder = WebviewWindowBuilder::new(
+        app,
+        "fallback",
+        WebviewUrl::App("fallback/index.html".into()),
+    )
+    .title("Dict")
+    .inner_size(width, height)
+    .transparent(true)
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .resizable(false)
+    // Don't steal key focus from the user's app; it stays clickable/hoverable.
+    .focused(false);
+
+    if let Some(monitor) = app.primary_monitor().ok().flatten() {
+        let screen_size = monitor.size();
+        let scale = monitor.scale_factor();
+        let screen_w = screen_size.width as f64 / scale;
+        let screen_h = screen_size.height as f64 / scale;
+        let x = (screen_w - width) / 2.0;
+        // Sit just above where the overlay bubble lives at the bottom.
+        let y = screen_h - height - 48.0;
+        builder = builder.position(x, y);
+    } else {
+        builder = builder.center();
+    }
+
+    match builder.build() {
+        Ok(win) => {
+            #[cfg(target_os = "macos")]
+            {
+                use objc2::msg_send;
+                use objc2::runtime::AnyObject;
+                use objc2_app_kit::NSColor;
+
+                if let Ok(ptr) = win.ns_window() {
+                    let ns_win = ptr as *mut AnyObject;
+                    unsafe {
+                        // Show on every Space and over fullscreen apps, and follow
+                        // the user rather than staying pinned to the origin Space.
+                        // canJoinAllSpaces(1) | stationary(16) | fullScreenAuxiliary(256)
+                        let _: () = msg_send![&*ns_win, setCollectionBehavior: 273usize];
+                        // Kill the transparent-window shadow that renders as a thin
+                        // rectangular outline around the bubble.
+                        let _: () = msg_send![&*ns_win, setHasShadow: false];
+                        let _: () = msg_send![&*ns_win, setOpaque: false];
+                        let clear = NSColor::clearColor();
+                        let _: () = msg_send![&*ns_win, setBackgroundColor: &*clear];
+                    }
+                }
+            }
+        }
+        Err(e) => tracing::error!("Failed to create fallback window: {}", e),
+    }
+}
+
 // ─── System Tray ────────────────────────────────────────
 
 fn build_tray_menu(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
@@ -420,7 +515,7 @@ fn build_tray_menu(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         },
     )
     .build(app)?;
-    let record_item = MenuItemBuilder::with_id("toggle_record", "Start Recording").build(app)?;
+    let record_item = MenuItemBuilder::with_id("toggle_record", "Start Dictation").build(app)?;
     let prefs_item = MenuItemBuilder::with_id("preferences", "Preferences...").build(app)?;
     let update_item =
         MenuItemBuilder::with_id("check_update", "Check for Updates...").build(app)?;
@@ -484,52 +579,14 @@ fn start_recording(app: &AppHandle) {
         }
     }
 
-    let generation = {
+    {
         let mut is_rec = state.is_recording.lock().unwrap();
         *is_rec = true;
-        let mut gen = state.recording_generation.lock().unwrap();
-        *gen = gen.wrapping_add(1);
-        *gen
-    };
+    }
 
     tracing::info!("Recording started (engine: Whisper)");
     show_overlay(app);
-
-    spawn_recording_timer(app, generation);
-}
-
-/// Background timer enforcing the 15-second hard recording limit.
-/// Emits `recording-warning` to the overlay at 12s and hard-stops at 15s,
-/// but only if this recording (identified by `generation`) is still the
-/// active one — a stale timer from a previous recording is a no-op.
-fn spawn_recording_timer(app: &AppHandle, generation: u64) {
-    let app = app.clone();
-    std::thread::spawn(move || {
-        // Returns true if recording is still active AND this timer owns it.
-        let still_owns = |app: &AppHandle| -> bool {
-            let state = app.state::<AppState>();
-            let is_rec = *state.is_recording.lock().unwrap();
-            let gen = *state.recording_generation.lock().unwrap();
-            is_rec && gen == generation
-        };
-
-        // 12s → warning
-        std::thread::sleep(std::time::Duration::from_secs(12));
-        if !still_owns(&app) {
-            return;
-        }
-        if let Some(win) = app.get_webview_window("overlay") {
-            let _ = win.emit("recording-warning", ());
-        }
-
-        // +3s (15s total) → hard stop
-        std::thread::sleep(std::time::Duration::from_secs(3));
-        if !still_owns(&app) {
-            return;
-        }
-        tracing::info!("Recording hit 15s hard limit, auto-stopping");
-        stop_recording(&app);
-    });
+    // No recording time limit — record for as long as the hotkey is held / toggled.
 }
 
 fn stop_recording(app: &AppHandle) {
@@ -616,8 +673,11 @@ fn handle_transcription(app: &AppHandle, text: &str) {
         if let Some(expansion) = snippets.match_trigger(text) {
             tracing::info!("Snippet matched: \"{}\" → expanding", text);
             hide_overlay(app);
-            if !text_injector::inject_text(&expansion, false) {
-                show_accessibility_alert(app);
+            // No editable field (or paste fails) → offer the text via the popup.
+            if !text_injector::has_editable_focus()
+                || !text_injector::inject_text(&expansion, false)
+            {
+                show_fallback(app, &expansion);
             }
             return;
         }
@@ -657,9 +717,18 @@ fn handle_transcription(app: &AppHandle, text: &str) {
         tracing::info!("Final text: {}", cleaned);
         hide_overlay(&app_handle);
 
+        // Broadcast the final text so UIs can react (e.g. the onboarding "try it"
+        // step shows it). Harmless in normal use — nothing listens.
+        let _ = app_handle.emit("transcription-result", &cleaned);
+
         let flow_mode = settings_data.flow_mode;
-        if !text_injector::inject_text(&cleaned, flow_mode) {
-            show_accessibility_alert(&app_handle);
+        // Give focus a moment to settle back on the user's app after the overlay
+        // closes, then check there's somewhere to paste before sending Cmd+V.
+        std::thread::sleep(std::time::Duration::from_millis(120));
+        if !text_injector::has_editable_focus()
+            || !text_injector::inject_text(&cleaned, flow_mode)
+        {
+            show_fallback(&app_handle, &cleaned);
         }
 
         // Privacy mode: don't persist transcription history to disk.
@@ -718,6 +787,106 @@ fn handle_hotkey_event(app: &AppHandle, shortcut_state: ShortcutState) {
     }
 }
 
+// ─── Bare-modifier / Fn triggers (native key monitor) ───
+
+/// True if the hotkey string is a single modifier / Fn key (not a normal
+/// accelerator). These can't be registered as global shortcuts, so they're
+/// handled by the native NSEvent monitor instead (macOS only).
+fn is_bare_modifier(hotkey: &str) -> bool {
+    matches!(
+        hotkey,
+        "Fn" | "Control"
+            | "LeftControl"
+            | "RightControl"
+            | "Option"
+            | "LeftOption"
+            | "RightOption"
+            | "Command"
+            | "LeftCommand"
+            | "RightCommand"
+            | "Shift"
+            | "LeftShift"
+            | "RightShift"
+    )
+}
+
+/// Map a bare-modifier token to its macOS virtual key code and the modifier flag
+/// bit that goes on/off when that physical key is pressed/released.
+#[cfg(target_os = "macos")]
+fn bare_modifier_keycode_flag(hotkey: &str) -> Option<(u16, usize)> {
+    const SHIFT: usize = 1 << 17;
+    const CONTROL: usize = 1 << 18;
+    const OPTION: usize = 1 << 19;
+    const COMMAND: usize = 1 << 20;
+    const FUNCTION: usize = 1 << 23;
+    Some(match hotkey {
+        "Fn" => (63, FUNCTION),
+        "Control" | "LeftControl" => (59, CONTROL),
+        "RightControl" => (62, CONTROL),
+        "Option" | "LeftOption" => (58, OPTION),
+        "RightOption" => (61, OPTION),
+        "Command" | "LeftCommand" => (55, COMMAND),
+        "RightCommand" => (54, COMMAND),
+        "Shift" | "LeftShift" => (56, SHIFT),
+        "RightShift" => (60, SHIFT),
+        _ => return None,
+    })
+}
+
+/// Called from the flagsChanged monitor. If the configured hotkey is a bare
+/// modifier matching this physical key, treat its press/release as the hotkey.
+#[cfg(target_os = "macos")]
+fn dispatch_modifier_event(app: &AppHandle, keycode: u16, flags: usize) {
+    let hk = {
+        let state = app.state::<AppState>();
+        let s = state.settings.lock().unwrap();
+        s.data.hotkey.clone()
+    };
+    if let Some((kc, mask)) = bare_modifier_keycode_flag(&hk) {
+        if keycode == kc {
+            let down = (flags & mask) != 0;
+            let ss = if down {
+                ShortcutState::Pressed
+            } else {
+                ShortcutState::Released
+            };
+            handle_hotkey_event(app, ss);
+        }
+    }
+}
+
+/// Install an always-on NSEvent monitor for modifier-flag changes so a bare
+/// modifier / Fn key can act as the dictation trigger. Installed once at startup
+/// (main thread); it reads the current hotkey live, so changing the hotkey needs
+/// no re-install. Requires Accessibility permission (already needed for pasting).
+#[cfg(target_os = "macos")]
+fn install_modifier_monitor(app: &AppHandle) {
+    use objc2_app_kit::{NSEvent, NSEventMask};
+    use std::ptr::NonNull;
+
+    let app_global = app.clone();
+    let global = block2::RcBlock::new(move |event: NonNull<NSEvent>| {
+        let ev = unsafe { event.as_ref() };
+        dispatch_modifier_event(&app_global, ev.keyCode(), ev.modifierFlags().0);
+    });
+    let _global_token =
+        NSEvent::addGlobalMonitorForEventsMatchingMask_handler(NSEventMask::FlagsChanged, &global);
+    std::mem::forget(global);
+
+    let app_local = app.clone();
+    let local = block2::RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
+        let ev = unsafe { event.as_ref() };
+        dispatch_modifier_event(&app_local, ev.keyCode(), ev.modifierFlags().0);
+        event.as_ptr()
+    });
+    let _local_token = unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::FlagsChanged, &local)
+    };
+    std::mem::forget(local);
+
+    tracing::info!("Modifier-key monitor installed");
+}
+
 // ─── App Entry Point ────────────────────────────────────
 
 pub fn run() {
@@ -749,7 +918,7 @@ pub fn run() {
             audio_capture: Mutex::new(AudioCapture::new()),
             is_recording: Mutex::new(false),
             recording_stopped_at: Mutex::new(None),
-            recording_generation: Mutex::new(0),
+            fallback_text: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
@@ -770,6 +939,7 @@ pub fn run() {
             find_whisper_binary_cmd,
             open_accessibility_settings,
             open_config_file,
+            get_fallback_text,
             models::list_llm_models,
             models::list_whisper_models,
             models::download_whisper_model,
@@ -789,7 +959,13 @@ pub fn run() {
                 });
             }
 
-            // Register global hotkey (from settings, falling back to the default)
+            // Install the native modifier/Fn key monitor (handles bare-modifier
+            // triggers live, reading the current hotkey from settings).
+            #[cfg(target_os = "macos")]
+            install_modifier_monitor(app.handle());
+
+            // Register the global hotkey from settings — unless it's a bare
+            // modifier / Fn key, which the monitor above handles instead.
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
                 let shortcut_str = {
@@ -800,13 +976,32 @@ pub fn run() {
                 let handler = |app: &AppHandle, _sc: &_, event: tauri_plugin_global_shortcut::ShortcutEvent| {
                     handle_hotkey_event(app, event.state);
                 };
-                if let Err(e) = app.global_shortcut().on_shortcut(shortcut_str.as_str(), handler) {
+                if is_bare_modifier(&shortcut_str) {
+                    tracing::info!("Modifier trigger active: {}", shortcut_str);
+                } else if let Err(e) = app.global_shortcut().on_shortcut(shortcut_str.as_str(), handler) {
                     tracing::error!("Failed to register hotkey '{}': {}", shortcut_str, e);
                     // Fall back to the platform default so the app stays usable
                     let fallback = hotkey::default_hotkey();
                     let _ = app.global_shortcut().on_shortcut(fallback, handler);
                 } else {
                     tracing::info!("Registered hotkey: {}", shortcut_str);
+                }
+
+                // Dedicated, always-on shortcut to open Preferences. The tray icon
+                // can be swallowed by the menu-bar overflow / notch on a crowded
+                // menu bar, so this guarantees a way into settings.
+                let prefs_handler =
+                    |app: &AppHandle, _sc: &_, event: tauri_plugin_global_shortcut::ShortcutEvent| {
+                        if event.state == ShortcutState::Pressed {
+                            open_preferences(app);
+                        }
+                    };
+                match app
+                    .global_shortcut()
+                    .on_shortcut("CmdOrCtrl+Shift+Comma", prefs_handler)
+                {
+                    Ok(_) => tracing::info!("Registered Preferences shortcut: Cmd+Shift+,"),
+                    Err(e) => tracing::error!("Failed to register Preferences shortcut: {}", e),
                 }
             }
 
@@ -850,6 +1045,10 @@ pub fn run() {
                     }
                     _ => {}
                 });
+
+                // Left-click shows the menu (reliable on macOS); "Preferences…" is
+                // the first actionable item. Direct click-to-open isn't reliable for
+                // a menu-attached tray icon, so we keep the menu as the entry point.
             }
 
             // Show onboarding if first launch

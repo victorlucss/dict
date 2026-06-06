@@ -1,0 +1,136 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    background: transparent;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    height: 100vh;
+    padding: 8px;
+}
+
+.popup {
+    width: 100%;
+    background: rgba(28, 28, 30, 0.96);
+    border: 1px solid transparent;
+    border-radius: 14px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, transform 0.08s ease;
+    animation: pop-in 0.18s ease-out;
+}
+
+.popup:active {
+    transform: scale(0.99);
+}
+
+.popup.copied {
+    border-color: rgba(48, 209, 88, 0.7);
+}
+
+@keyframes pop-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.header {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: rgba(255, 255, 255, 0.55);
+    white-space: nowrap;
+}
+
+.popup.copied .header {
+    color: rgba(48, 209, 88, 0.95);
+}
+
+.text {
+    font-size: 13px;
+    line-height: 1.4;
+    color: #fff;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+}
+
+/* ---- Circular countdown ---- */
+.timer {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+/* Only the ring SVG is rotated so the countdown starts at 12 o'clock; the icon
+   SVG lives inside .timer-icon and must NOT inherit this rotation. */
+.timer > svg {
+    transform: rotate(-90deg);
+}
+
+.ring-track {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.14);
+    stroke-width: 2.5;
+}
+
+.ring-fill {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.85);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    /* circumference for r=11 ≈ 69.1 */
+    stroke-dasharray: 69.1;
+    stroke-dashoffset: 0;
+}
+
+.ring-fill.run {
+    animation: deplete 5s linear forwards;
+}
+
+/* Pause the countdown while the cursor is over the popup. */
+.popup:hover .ring-fill.run {
+    animation-play-state: paused;
+}
+
+@keyframes deplete {
+    to { stroke-dashoffset: 69.1; }
+}
+
+.popup.copied .ring-fill {
+    stroke: rgba(48, 209, 88, 0.95);
+}
+
+.timer-icon {
+    position: absolute;
+    color: rgba(255, 255, 255, 0.85);
+    display: inline-flex;
+}
+
+.popup.copied .timer-icon {
+    color: rgba(48, 209, 88, 0.95);
+}

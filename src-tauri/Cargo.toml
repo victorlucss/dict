@@ -1,6 +1,6 @@
 [package]
 name = "dict"
-version = "0.6.0"
+version = "0.7.0"
 description = "Voice to text via global hotkey — cross-platform"
 edition = "2021"
 
@@ -39,8 +39,11 @@ chrono = { version = "0.4", features = ["serde"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication", "NSEvent", "NSColor", "block2"] }
+block2 = "0.6"
 window-vibrancy = "0.6"
+core-foundation = "0.10"
+core-foundation-sys = "0.8"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

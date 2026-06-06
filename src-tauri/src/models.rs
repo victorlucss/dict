@@ -83,7 +83,17 @@ pub async fn list_llm_models(provider: String, endpoint: String, api_key: String
             }
             fetch_ids(req).await
         }
-        // "ollama", "lmstudio", and any unknown provider → treat as local.
+        "ollama" => {
+            // Ollama's authoritative model list is its native /api/tags endpoint
+            // (present on every Ollama version). Try it first, then fall back to
+            // the OpenAI-compat /v1/models in case tags is unavailable.
+            let tags = fetch_ids(client.get(ollama_tags_url(&endpoint))).await;
+            if !tags.is_empty() {
+                return tags;
+            }
+            fetch_ids(client.get(derive_models_url(&endpoint))).await
+        }
+        // "lmstudio" and any unknown provider → treat as OpenAI-compatible local.
         _ => {
             let url = derive_models_url(&endpoint);
             let mut req = client.get(&url);
@@ -155,6 +165,17 @@ fn dedup(mut ids: Vec<String>) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     ids.retain(|id| seen.insert(id.clone()));
     ids
+}
+
+/// Derive Ollama's native `/api/tags` URL from a chat endpoint.
+/// `http://localhost:11434/v1/chat/completions` → `http://localhost:11434/api/tags`.
+/// Falls back to treating the whole endpoint as the base if there's no `/v1`.
+fn ollama_tags_url(endpoint: &str) -> String {
+    let base = match endpoint.find("/v1") {
+        Some(i) => &endpoint[..i],
+        None => endpoint,
+    };
+    format!("{}/api/tags", base.trim_end_matches('/'))
 }
 
 /// Derive the `/models` URL from a chat endpoint.
