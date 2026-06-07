@@ -20,57 +20,90 @@ async function authUser(ctx: any, req: Request) {
   return await ctx.runQuery(internal.model.userByToken, { token });
 }
 
-// Email a 6-digit code (Resend); in dev (no key) just log it.
-async function sendCodeEmail(email: string, code: string) {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    console.log(`[dict-cloud] dev login code for ${email}: ${code}`);
-    return;
-  }
-  await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      from: process.env.MAIL_FROM || "Dict <login@dict.tianxu.cloud>",
-      to: email,
-      subject: "Your Dict sign-in code",
-      text: `Your Dict sign-in code is ${code}. It expires in 10 minutes.`,
-    }),
-  });
+function newToken(): string {
+  return crypto.randomUUID() + crypto.randomUUID().replace(/-/g, "");
 }
 
-// POST /auth/request-code  { email } -> { ok: true }
-http.route({
-  path: "/auth/request-code",
-  method: "POST",
-  handler: httpAction(async (ctx, req) => {
-    const body = await req.json().catch(() => ({}));
-    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-    if (!email || !email.includes("@")) return json({ error: "bad_email" }, 400);
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    await ctx.runMutation(internal.model.storeCode, { email, code, now: Date.now() });
-    await sendCodeEmail(email, code);
-    return json({ ok: true });
-  }),
-});
+function bytesToB64(b: Uint8Array): string {
+  let s = "";
+  for (const x of b) s += String.fromCharCode(x);
+  return btoa(s);
+}
 
-// POST /auth/verify  { email, code } -> { token } | 401
+function b64ToBytes(s: string): Uint8Array {
+  const bin = atob(s);
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+
+// PBKDF2-HMAC-SHA256, 100k iterations. Returns base64 hash + salt.
+async function hashPassword(
+  password: string,
+  saltB64?: string,
+): Promise<{ hash: string; salt: string }> {
+  const salt = saltB64 ? b64ToBytes(saltB64) : crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+    key,
+    256,
+  );
+  return { hash: bytesToB64(new Uint8Array(bits)), salt: bytesToB64(salt) };
+}
+
+// POST /auth/signup  { email, password } -> { token } | 409 email_taken
 http.route({
-  path: "/auth/verify",
+  path: "/auth/signup",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
     const body = await req.json().catch(() => ({}));
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-    const code = typeof body.code === "string" ? body.code.trim() : "";
-    if (!email || !code) return json({ error: "bad_request" }, 400);
-    const token = crypto.randomUUID() + crypto.randomUUID().replace(/-/g, "");
-    const res = await ctx.runMutation(internal.model.verifyCode, {
+    const password = typeof body.password === "string" ? body.password : "";
+    if (!email || !email.includes("@")) return json({ error: "bad_email" }, 400);
+    if (password.length < 8) return json({ error: "weak_password" }, 400);
+
+    const { hash, salt } = await hashPassword(password);
+    const token = newToken();
+    const res = await ctx.runMutation(internal.model.createUser, {
       email,
-      code,
+      passwordHash: hash,
+      passwordSalt: salt,
       token,
       now: Date.now(),
     });
-    if (!res) return json({ error: "invalid_code" }, 401);
+    if (!res) return json({ error: "email_taken" }, 409);
+    return json({ token });
+  }),
+});
+
+// POST /auth/signin  { email, password } -> { token } | 401
+http.route({
+  path: "/auth/signin",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const body = await req.json().catch(() => ({}));
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    if (!email || !password) return json({ error: "bad_request" }, 400);
+
+    const auth = await ctx.runQuery(internal.model.getUserAuth, { email });
+    if (!auth) return json({ error: "invalid_credentials" }, 401);
+    const { hash } = await hashPassword(password, auth.passwordSalt);
+    if (hash !== auth.passwordHash) return json({ error: "invalid_credentials" }, 401);
+
+    const token = newToken();
+    await ctx.runMutation(internal.model.createSession, {
+      userId: auth.userId,
+      token,
+      now: Date.now(),
+    });
     return json({ token });
   }),
 });

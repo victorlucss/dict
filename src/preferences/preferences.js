@@ -404,50 +404,36 @@ function updateDictCloudAccount() {
     if (signedIn) {
         document.getElementById('dcEmailLabel').textContent = email;
     } else {
-        document.getElementById('dcCodeRow').classList.add('hidden');
         dcShowStatus(null);
         dcShowError(null);
     }
 }
 
-document.getElementById('dcSendCode')?.addEventListener('click', async () => {
+// Shared sign-in / sign-up handler.
+async function dcAuth(command) {
     const email = document.getElementById('dcEmail').value.trim();
+    const password = document.getElementById('dcPassword').value;
     if (!email || !email.includes('@')) { dcShowError('Enter a valid email address.'); return; }
+    if (!password || password.length < 8) { dcShowError('Password must be at least 8 characters.'); return; }
     dcShowError(null);
-    const btn = document.getElementById('dcSendCode');
-    btn.disabled = true;
+    const buttons = [document.getElementById('dcSignIn'), document.getElementById('dcSignUp')];
+    buttons.forEach((b) => (b.disabled = true));
     try {
-        await invoke('dict_cloud_request_code', { email });
-        document.getElementById('dcCodeRow').classList.remove('hidden');
-        dcShowStatus(`We sent a code to ${email}. Enter it below.`);
-        document.getElementById('dcCode').focus();
-    } catch (e) {
-        dcShowError(typeof e === 'string' ? e : 'Could not send the code.');
-    } finally {
-        btn.disabled = false;
-    }
-});
-
-document.getElementById('dcVerify')?.addEventListener('click', async () => {
-    const email = document.getElementById('dcEmail').value.trim();
-    const code = document.getElementById('dcCode').value.trim();
-    if (!code) { dcShowError('Enter the 6-digit code.'); return; }
-    dcShowError(null);
-    const btn = document.getElementById('dcVerify');
-    btn.disabled = true;
-    try {
-        await invoke('dict_cloud_verify', { email, code });
+        await invoke(command, { email, password });
         // Refresh settings so the signed-in email shows and auto-save preserves the token.
         currentSettings = await invoke('get_settings');
         document.getElementById('dcEmail').value = '';
-        document.getElementById('dcCode').value = '';
+        document.getElementById('dcPassword').value = '';
         updateDictCloudAccount();
     } catch (e) {
-        dcShowError(typeof e === 'string' ? e : 'That code did not work.');
+        dcShowError(typeof e === 'string' ? e : 'Sign-in failed.');
     } finally {
-        btn.disabled = false;
+        buttons.forEach((b) => (b.disabled = false));
     }
-});
+}
+
+document.getElementById('dcSignIn')?.addEventListener('click', () => dcAuth('dict_cloud_sign_in'));
+document.getElementById('dcSignUp')?.addEventListener('click', () => dcAuth('dict_cloud_sign_up'));
 
 document.getElementById('dcSignOut')?.addEventListener('click', async () => {
     try {

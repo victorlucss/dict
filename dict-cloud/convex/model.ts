@@ -1,44 +1,65 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
-const CODE_TTL_MS = 10 * 60 * 1000; // login codes valid 10 minutes
 const FREE_DAILY_LIMIT = 100; // cleanups/day per user on the free tier
 
-// Store a fresh login code for an email, replacing any previous one.
-export const storeCode = internalMutation({
-  args: { email: v.string(), code: v.string(), now: v.number() },
-  handler: async (ctx, { email, code, now }) => {
-    const existing = await ctx.db
-      .query("loginCodes")
-      .withIndex("by_email", (q) => q.eq("email", email))
-      .collect();
-    for (const e of existing) await ctx.db.delete(e._id);
-    await ctx.db.insert("loginCodes", { email, code, expiresAt: now + CODE_TTL_MS });
+// Create a new account (hash computed in the action). Fails if email is taken.
+export const createUser = internalMutation({
+  args: {
+    email: v.string(),
+    passwordHash: v.string(),
+    passwordSalt: v.string(),
+    token: v.string(),
+    now: v.number(),
   },
-});
-
-// Validate a code; on success create/find the user and persist a session token.
-export const verifyCode = internalMutation({
-  args: { email: v.string(), code: v.string(), token: v.string(), now: v.number() },
   returns: v.union(v.null(), v.object({ userId: v.id("users") })),
-  handler: async (ctx, { email, code, token, now }) => {
-    const rec = await ctx.db
-      .query("loginCodes")
-      .withIndex("by_email", (q) => q.eq("email", email))
-      .first();
-    if (!rec || rec.code !== code || rec.expiresAt < now) return null;
-    await ctx.db.delete(rec._id);
-
-    let user = await ctx.db
+  handler: async (ctx, { email, passwordHash, passwordSalt, token, now }) => {
+    const existing = await ctx.db
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", email))
       .first();
-    if (!user) {
-      const id = await ctx.db.insert("users", { email, createdAt: now });
-      user = await ctx.db.get(id);
-    }
-    await ctx.db.insert("sessions", { userId: user!._id, token, createdAt: now });
-    return { userId: user!._id };
+    if (existing) return null; // email already registered
+    const userId = await ctx.db.insert("users", {
+      email,
+      passwordHash,
+      passwordSalt,
+      createdAt: now,
+    });
+    await ctx.db.insert("sessions", { userId, token, createdAt: now });
+    return { userId };
+  },
+});
+
+// Look up the stored hash + salt for sign-in (verification happens in the action).
+export const getUserAuth = internalQuery({
+  args: { email: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      userId: v.id("users"),
+      passwordHash: v.string(),
+      passwordSalt: v.string(),
+    }),
+  ),
+  handler: async (ctx, { email }) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", email))
+      .first();
+    if (!user) return null;
+    return {
+      userId: user._id,
+      passwordHash: user.passwordHash,
+      passwordSalt: user.passwordSalt,
+    };
+  },
+});
+
+// Persist a new session token after a successful sign-in.
+export const createSession = internalMutation({
+  args: { userId: v.id("users"), token: v.string(), now: v.number() },
+  handler: async (ctx, { userId, token, now }) => {
+    await ctx.db.insert("sessions", { userId, token, createdAt: now });
   },
 });
 

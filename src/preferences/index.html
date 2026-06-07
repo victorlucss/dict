@@ -242,15 +242,17 @@
                             <div class="setting-desc">Sign in to clean up transcriptions on our servers — no model, key, or endpoint to set up. Your audio never leaves your Mac; only the transcribed text is sent.</div>
                         </div>
                         <div class="setting-control setting-control-full">
-                            <!-- Signed-out: email → one-time code -->
+                            <!-- Signed-out: email + password -->
                             <div id="dcSignedOut">
                                 <div class="add-row">
                                     <input type="email" id="dcEmail" placeholder="you@example.com" autocomplete="email">
-                                    <button type="button" class="btn-secondary" id="dcSendCode">Send code</button>
                                 </div>
-                                <div class="add-row hidden" id="dcCodeRow">
-                                    <input type="text" id="dcCode" placeholder="6-digit code" inputmode="numeric" maxlength="6">
-                                    <button type="button" class="btn-primary" id="dcVerify">Verify</button>
+                                <div class="add-row">
+                                    <input type="password" id="dcPassword" placeholder="Password (8+ characters)" autocomplete="current-password">
+                                </div>
+                                <div class="dc-actions">
+                                    <button type="button" class="btn-primary" id="dcSignIn">Sign in</button>
+                                    <button type="button" class="btn-secondary" id="dcSignUp">Create account</button>
                                 </div>
                                 <div class="dc-status hidden" id="dcStatus"></div>
                                 <div class="control-error hidden" id="dcError"></div>

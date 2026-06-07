@@ -400,34 +400,19 @@ fn show_accessibility_alert(_app: &AppHandle) {
         .spawn();
 }
 
-/// Dict Cloud: email a one-time sign-in code.
-#[tauri::command]
-async fn dict_cloud_request_code(email: String) -> Result<(), String> {
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(format!("{}/auth/request-code", llm::DICT_CLOUD_ENDPOINT))
-        .json(&serde_json::json!({ "email": email }))
-        .timeout(std::time::Duration::from_secs(15))
-        .send()
-        .await
-        .map_err(|e| format!("Couldn't reach Dict Cloud: {}", e))?;
-    if !resp.status().is_success() {
-        return Err("Couldn't send the code. Check the email and try again.".to_string());
-    }
-    Ok(())
-}
-
-/// Dict Cloud: verify the code, store the returned session token + email.
-#[tauri::command]
-async fn dict_cloud_verify(
-    app: tauri::AppHandle,
+/// Dict Cloud auth: POST {email, password} to `path`, store the returned token
+/// + email on success. Shared by sign-up and sign-in.
+async fn dict_cloud_auth(
+    app: &tauri::AppHandle,
+    path: &str,
     email: String,
-    code: String,
+    password: String,
+    fail_msg: &str,
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("{}/auth/verify", llm::DICT_CLOUD_ENDPOINT))
-        .json(&serde_json::json!({ "email": email, "code": code }))
+        .post(format!("{}{}", llm::DICT_CLOUD_ENDPOINT, path))
+        .json(&serde_json::json!({ "email": email, "password": password }))
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
@@ -439,7 +424,15 @@ async fn dict_cloud_verify(
         .await
         .map_err(|e| format!("Unexpected response: {}", e))?;
     if !status.is_success() {
-        return Err("That code didn't work — double-check it and try again.".to_string());
+        // Surface a couple of specific cases; otherwise the generic message.
+        let err = data["error"].as_str().unwrap_or("");
+        let msg = match err {
+            "email_taken" => "That email already has an account — sign in instead.",
+            "weak_password" => "Password must be at least 8 characters.",
+            "bad_email" => "Enter a valid email address.",
+            _ => fail_msg,
+        };
+        return Err(msg.to_string());
     }
     let token = data["token"]
         .as_str()
@@ -452,6 +445,33 @@ async fn dict_cloud_verify(
     s.data.dict_cloud_email = email.clone();
     s.save().map_err(|e| e.to_string())?;
     Ok(email)
+}
+
+/// Dict Cloud: create an account with email + password.
+#[tauri::command]
+async fn dict_cloud_sign_up(
+    app: tauri::AppHandle,
+    email: String,
+    password: String,
+) -> Result<String, String> {
+    dict_cloud_auth(&app, "/auth/signup", email, password, "Couldn't create the account.").await
+}
+
+/// Dict Cloud: sign in with email + password.
+#[tauri::command]
+async fn dict_cloud_sign_in(
+    app: tauri::AppHandle,
+    email: String,
+    password: String,
+) -> Result<String, String> {
+    dict_cloud_auth(
+        &app,
+        "/auth/signin",
+        email,
+        password,
+        "Wrong email or password.",
+    )
+    .await
 }
 
 /// Dict Cloud: sign out (clear the stored token + email).
@@ -1015,8 +1035,8 @@ pub fn run() {
             open_accessibility_settings,
             open_config_file,
             get_fallback_text,
-            dict_cloud_request_code,
-            dict_cloud_verify,
+            dict_cloud_sign_up,
+            dict_cloud_sign_in,
             dict_cloud_sign_out,
             models::list_llm_models,
             models::list_whisper_models,

@@ -1,7 +1,7 @@
 # Dict Cloud (Convex backend)
 
 Managed cleanup for Dict, with **accounts** and **feature flags**, on
-[Convex](https://convex.dev). Users sign in with an email one-time code; the
+[Convex](https://convex.dev). Users sign in with **email + password**; the
 backend holds the upstream LLM key and cleans transcriptions server-side. Audio
 never reaches this service — only the transcribed text. Full design in
 [`../DICT-CLOUD.md`](../DICT-CLOUD.md).
@@ -10,8 +10,8 @@ never reaches this service — only the transcribed text. Full design in
 
 ```
 convex/
-  schema.ts   users, sessions, loginCodes, featureFlags, usage
-  http.ts     POST /auth/request-code, POST /auth/verify, POST /v1/clean, GET /v1/flags
+  schema.ts   users (email + PBKDF2 password hash), sessions, featureFlags, usage
+  http.ts     POST /auth/signup, POST /auth/signin, POST /v1/clean, GET /v1/flags
   model.ts    internal DB queries/mutations used by the HTTP actions
   prompt.ts   buildSystemPrompt (mirrors the client's llm.rs)
   admin.ts    defineFlag / setUserFlag / listFlags (run from the dashboard)
@@ -20,14 +20,16 @@ convex/
 ## HTTP API
 
 ```jsonc
-POST /auth/request-code   { email }                 -> { ok: true }            // emails a 6-digit code
-POST /auth/verify         { email, code }           -> { token } | 401         // long-lived bearer token
-POST /v1/clean            { text, tone, accuracy, app, dictionary, codeMode }
-                          Authorization: Bearer <token>
-                                                    -> { cleaned } | 401 | 429
-GET  /v1/flags            Authorization: Bearer <token>
-                                                    -> { flags: { key: bool } }
+POST /auth/signup   { email, password }   -> { token } | 409 email_taken | 400  // password >= 8 chars
+POST /auth/signin   { email, password }   -> { token } | 401                     // long-lived bearer token
+POST /v1/clean      { text, tone, accuracy, app, dictionary, codeMode }
+                    Authorization: Bearer <token>
+                                          -> { cleaned } | 401 | 429
+GET  /v1/flags      Authorization: Bearer <token>
+                                          -> { flags: { key: bool } }
 ```
+
+Passwords are stored as a PBKDF2-HMAC-SHA256 hash (100k iterations) + per-user salt.
 
 The Dict client (`src-tauri/src/llm.rs`) calls `/v1/clean` with the stored token
 when the LLM provider is **Dict Cloud**, and `/v1/flags` on launch to gate
@@ -45,8 +47,6 @@ npx convex dev            # logs in, creates a deployment, generates convex/_gen
 #   UPSTREAM_ENDPOINT   OpenAI-compatible chat URL (e.g. https://api.openai.com/v1/chat/completions)
 #   UPSTREAM_MODEL      e.g. gpt-4o-mini
 #   UPSTREAM_API_KEY    your upstream LLM key  (secret)
-#   RESEND_API_KEY      for sending login codes (optional in dev — codes log to the console)
-#   MAIL_FROM           e.g. "Dict <login@dict.tianxu.cloud>"
 ```
 
 `npx convex dev` prints your deployment's **HTTP Actions URL**
@@ -67,5 +67,5 @@ The client fetches `/v1/flags` and enables matching experimental features.
 ## Notes
 
 - **Privacy:** transcripts aren't logged or stored — processed in memory, dropped.
-- **Auth:** email OTP → a bearer token stored on the client. Free tier is
+- **Auth:** email + password → a bearer token stored on the client. Free tier is
   rate-limited per user/day (see `FREE_DAILY_LIMIT` in `model.ts`).
