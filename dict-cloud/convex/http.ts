@@ -116,6 +116,11 @@ http.route({
     const user = await authUser(ctx, req);
     if (!user) return json({ error: "unauthorized" }, 401);
 
+    // Cost control: cloud cleanup is gated behind a per-user flag (off by default).
+    // Enable per account via admin:setUserFlag(email, "cloud_cleanup", true).
+    const flags = await ctx.runQuery(internal.model.flagsForUser, { userId: user._id });
+    if (!flags["cloud_cleanup"]) return json({ error: "not_enabled" }, 403);
+
     const day = new Date().toISOString().slice(0, 10);
     const { allowed } = await ctx.runMutation(internal.model.checkAndBumpUsage, {
       userId: user._id,

@@ -396,17 +396,33 @@ function dcShowStatus(msg) {
     el.classList.toggle('hidden', !msg);
 }
 
-// Reflect signed-in vs signed-out state from currentSettings.
-function updateDictCloudAccount() {
+// Reflect signed-in vs signed-out state from currentSettings, and (when signed
+// in) show whether the account has Dict Cloud cleanup access (a feature flag).
+async function updateDictCloudAccount() {
     const email = currentSettings?.dictCloudEmail || '';
     const signedIn = !!email;
     document.getElementById('dcSignedIn').classList.toggle('hidden', !signedIn);
     document.getElementById('dcSignedOut').classList.toggle('hidden', signedIn);
-    if (signedIn) {
-        document.getElementById('dcEmailLabel').textContent = email;
-    } else {
+    if (!signedIn) {
         dcShowStatus(null);
         dcShowError(null);
+        return;
+    }
+    document.getElementById('dcEmailLabel').textContent = email;
+
+    const accessEl = document.getElementById('dcAccess');
+    accessEl.className = 'dc-access';
+    accessEl.textContent = 'Checking access…';
+    try {
+        const flags = await invoke('dict_cloud_flags');
+        if (flags && flags.cloud_cleanup) {
+            accessEl.textContent = '✓ Dict Cloud cleanup is enabled for your account.';
+            accessEl.classList.add('enabled');
+        } else {
+            accessEl.textContent = "Dict Cloud cleanup isn't enabled for your account yet — you're on the list, we'll turn it on soon.";
+        }
+    } catch (e) {
+        accessEl.textContent = "Couldn't check access right now.";
     }
 }
 

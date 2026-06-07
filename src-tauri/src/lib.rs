@@ -474,6 +474,35 @@ async fn dict_cloud_sign_in(
     .await
 }
 
+/// Dict Cloud: fetch the signed-in account's feature flags (e.g. cloud_cleanup).
+#[tauri::command]
+async fn dict_cloud_flags(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let token = {
+        let state = app.state::<AppState>();
+        let s = state.settings.lock().map_err(|e| e.to_string())?;
+        s.data.dict_cloud_token.clone()
+    };
+    if token.is_empty() {
+        return Err("Not signed in".to_string());
+    }
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(format!("{}/v1/flags", llm::DICT_CLOUD_ENDPOINT))
+        .header("Authorization", format!("Bearer {}", token))
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(|e| format!("Couldn't reach Dict Cloud: {}", e))?;
+    if !resp.status().is_success() {
+        return Err("Couldn't load account status.".to_string());
+    }
+    let data: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Unexpected response: {}", e))?;
+    Ok(data.get("flags").cloned().unwrap_or(serde_json::json!({})))
+}
+
 /// Dict Cloud: sign out (clear the stored token + email).
 #[tauri::command]
 fn dict_cloud_sign_out(app: tauri::AppHandle) -> Result<(), String> {
@@ -1038,6 +1067,7 @@ pub fn run() {
             dict_cloud_sign_up,
             dict_cloud_sign_in,
             dict_cloud_sign_out,
+            dict_cloud_flags,
             models::list_llm_models,
             models::list_whisper_models,
             models::download_whisper_model,

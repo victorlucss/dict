@@ -524,6 +524,17 @@ textarea:focus {
     font-weight: 600;
 }
 
+.dc-access {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: rgba(235, 235, 245, 0.6);
+}
+
+.dc-access.enabled {
+    color: #34c759;
+}
+
 /* Buttons */
 .btn-primary {
     padding: 7px 22px;
