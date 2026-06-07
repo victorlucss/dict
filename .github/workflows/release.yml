@@ -136,7 +136,10 @@ jobs:
 
           MAC="$(find_asset '.app.tar.gz')"
           LINUX="$(find_asset '.AppImage')"
-          WIN="$(find_asset '.nsis.zip')"
+          # Tauri v2's NSIS updater artifact is the -setup.exe itself (with a
+          # sibling .sig), not a .nsis.zip. Fall back to .nsis.zip just in case.
+          WIN="$(find_asset '-setup.exe')"
+          [ -z "$WIN" ] && WIN="$(find_asset '.nsis.zip')"
 
           # Pull every signature file so we can inline them into the manifest.
           gh release download "$TAG" --repo "$REPO" --pattern '*.sig' --dir sigs --clobber || true
