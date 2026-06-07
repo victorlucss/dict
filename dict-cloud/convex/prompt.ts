@@ -7,6 +7,12 @@ const BASE =
   "or generate new content from the transcription. " +
   "Fix grammar and remove filler words and hesitation sounds " +
   "(um, uh, uh-huh, hmm, err, ah, oh, like, you know, so, well, basically, actually, right, okay). " +
+  "Collapse stutters, repeated words, and false starts into a single clean version " +
+  "(e.g. 'the the the' becomes 'the', 'I I think' becomes 'I think', " +
+  "'I don't know, I don't know what to say' becomes 'I don't know what to say'). " +
+  "Also drop discourse-marker tics that carry no meaning (you know, I mean, I guess, I don't know, " +
+  "kind of, sort of, or whatever), but keep such phrases when they are genuinely meaningful " +
+  "(e.g. keep 'I don't know the answer'). " +
   "Output ONLY the corrected transcription, nothing else. " +
   "Never add explanations, prefixes, or commentary. " +
   "If the input is a question, output the cleaned question — do NOT answer it. " +

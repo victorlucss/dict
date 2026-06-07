@@ -789,6 +789,30 @@ fn stop_recording(app: &AppHandle) {
     }
 }
 
+/// Stop recording and throw the audio away without transcribing. Used when the
+/// user clearly didn't mean to dictate (e.g. they held a bare-modifier hotkey but
+/// pressed another key, using it as a chord like Option+Arrow).
+fn cancel_recording(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    {
+        let mut is_rec = state.is_recording.lock().unwrap();
+        if !*is_rec {
+            return;
+        }
+        *is_rec = false;
+    }
+    // Stop capture and discard the WAV; do not transcribe.
+    let discarded = {
+        let mut capture = state.audio_capture.lock().unwrap();
+        capture.stop()
+    };
+    if let Ok(path) = discarded {
+        let _ = std::fs::remove_file(path);
+    }
+    tracing::info!("Recording cancelled (hotkey used as a chord)");
+    hide_overlay(app);
+}
+
 fn handle_transcription(app: &AppHandle, text: &str) {
     if text.is_empty() {
         tracing::info!("Empty transcription, skipping.");
@@ -995,6 +1019,24 @@ fn dispatch_modifier_event(app: &AppHandle, keycode: u16, flags: usize) {
     }
 }
 
+/// Called from the keyDown monitor. If a bare-modifier hotkey is active and we're
+/// currently recording, a real (non-modifier) keypress means the user is using the
+/// modifier as a chord, not dictating, so cancel and discard the recording.
+/// (Modifier keys themselves emit flagsChanged, not keyDown, so any keyDown here is
+/// a genuine other key.)
+#[cfg(target_os = "macos")]
+fn dispatch_key_down(app: &AppHandle) {
+    let (hk, recording) = {
+        let state = app.state::<AppState>();
+        let hk = state.settings.lock().unwrap().data.hotkey.clone();
+        let recording = *state.is_recording.lock().unwrap();
+        (hk, recording)
+    };
+    if recording && is_bare_modifier(&hk) {
+        cancel_recording(app);
+    }
+}
+
 /// Install an always-on NSEvent monitor for modifier-flag changes so a bare
 /// modifier / Fn key can act as the dictation trigger. Installed once at startup
 /// (main thread); it reads the current hotkey live, so changing the hotkey needs
@@ -1023,6 +1065,27 @@ fn install_modifier_monitor(app: &AppHandle) {
         NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::FlagsChanged, &local)
     };
     std::mem::forget(local);
+
+    // KeyDown monitors: cancel an in-progress bare-modifier dictation when the user
+    // presses another key (using the modifier as a chord). Observe-only — the key
+    // still reaches the focused app so chords like Option+Arrow keep working.
+    let app_global_key = app.clone();
+    let global_key = block2::RcBlock::new(move |_event: NonNull<NSEvent>| {
+        dispatch_key_down(&app_global_key);
+    });
+    let _global_key_token =
+        NSEvent::addGlobalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &global_key);
+    std::mem::forget(global_key);
+
+    let app_local_key = app.clone();
+    let local_key = block2::RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
+        dispatch_key_down(&app_local_key);
+        event.as_ptr()
+    });
+    let _local_key_token = unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &local_key)
+    };
+    std::mem::forget(local_key);
 
     tracing::info!("Modifier-key monitor installed");
 }

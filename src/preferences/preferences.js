@@ -489,12 +489,13 @@ async function updateDictCloudAccount() {
                 subEl.textContent = `${used} today`;
                 barEl.style.display = 'none';
             } else {
-                const remaining = Math.max(0, Math.round(((limit - used) / limit) * 100));
-                pctEl.textContent = `${remaining}%`;
+                const usedPct = Math.min(100, Math.round((used / limit) * 100));
+                pctEl.textContent = `${usedPct}%`;
                 subEl.textContent = `${used} of ${limit} used`;
                 barEl.style.display = '';
-                fillEl.style.width = `${remaining}%`;
-                fillEl.classList.toggle('low', remaining <= 15);
+                fillEl.style.width = `${usedPct}%`;
+                // Warn as the daily allowance fills up.
+                fillEl.classList.toggle('warn', usedPct >= 85);
             }
             document.getElementById('dcUsagePlan').textContent = planLabel;
             usageCard.classList.remove('hidden');
@@ -960,7 +961,6 @@ function updateProviderFields() {
     document.getElementById('apiKeyRow').style.display = isCloud ? 'flex' : 'none';
     document.getElementById('endpointRow').style.display = isDictCloud ? 'none' : 'flex';
     document.getElementById('modelRow').style.display = isDictCloud ? 'none' : 'flex';
-    document.getElementById('dictCloudNote').style.display = isDictCloud ? 'flex' : 'none';
 
     // No model list to fetch for Dict Cloud; refreshModels persists for the
     // others, so persist here when switching to Dict Cloud. (No-op during init.)
@@ -1375,8 +1375,15 @@ function makeCloudBadge() {
     const span = document.createElement('span');
     span.className = 'history-cloud';
     span.innerHTML = GLOBE_ICON_SVG;
-    span.title = 'This message was refined through Dict Cloud';
     span.setAttribute('aria-label', 'Refined through Dict Cloud');
+    // Custom styled tooltip. Driven by JS pointer events (not CSS :hover) because
+    // the macOS webview can leave a :hover state stuck, so the bubble never hides.
+    const tip = document.createElement('span');
+    tip.className = 'history-cloud-tip';
+    tip.textContent = 'Refined through Dict Cloud';
+    span.appendChild(tip);
+    span.addEventListener('mouseenter', () => span.classList.add('tip-open'));
+    span.addEventListener('mouseleave', () => span.classList.remove('tip-open'));
     return span;
 }
 
@@ -1424,12 +1431,13 @@ async function loadHistory() {
 
             const text = entry.cleaned || entry.raw || '';
 
-            // Actions, pinned to the top-right, stacked: copy button on top, and
-            // the cloud badge below it (when refined via Dict Cloud).
+            // Actions, pinned to the top-right on one row: the cloud badge (when
+            // refined via Dict Cloud) sits to the left of the copy button. Keeping
+            // them side by side means short, single-line entries still show both.
             const right = document.createElement('div');
             right.className = 'history-actions';
-            right.appendChild(makeCopyButton(text));
             if (entry.cloud) right.appendChild(makeCloudBadge());
+            right.appendChild(makeCopyButton(text));
             item.appendChild(right);
 
             const cleaned = document.createElement('div');

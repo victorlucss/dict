@@ -523,6 +523,11 @@ textarea:focus {
     max-width: 460px;
 }
 
+/* Breathing room between stacked account cards (sign-in + usage). */
+#section-account .card + .card {
+    margin-top: 16px;
+}
+
 /* Account (Dict Cloud) panel: tight sign-in form. */
 .dc-panel {
     display: flex;
@@ -702,8 +707,8 @@ textarea:focus {
     transition: width 0.35s ease;
 }
 
-/* Running low on the daily allowance. */
-.usage-bar-fill.low {
+/* Approaching the daily limit. */
+.usage-bar-fill.warn {
     background: #f5a623;
 }
 
@@ -939,7 +944,7 @@ textarea:focus {
     top: 10px;
     right: 12px;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
@@ -960,6 +965,7 @@ textarea:focus {
 }
 
 .history-cloud {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -967,6 +973,36 @@ textarea:focus {
     height: 24px;
     color: rgba(235, 235, 245, 0.45);
     cursor: default;
+}
+
+/* Custom tooltip for the cloud badge. Visibility is toggled via JS (.tip-open),
+   not CSS :hover, so the macOS webview can't leave it stuck open. */
+.history-cloud-tip {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 30;
+    width: max-content;
+    max-width: 220px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: #161617;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #ececee;
+    font-size: 12px;
+    line-height: 1.35;
+    text-align: left;
+    white-space: normal;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transform: translateY(-3px);
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.history-cloud.tip-open .history-cloud-tip {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .history-copy {
@@ -1006,7 +1042,8 @@ textarea:focus {
     font-size: 13px;
     color: #ececee;
     line-height: 1.45;
-    padding-right: 34px;
+    /* Clear the top-right actions (cloud badge + copy button on one row). */
+    padding-right: 64px;
 }
 
 /* ----- Custom (Codex-style) dropdown ------------------------------------- */
