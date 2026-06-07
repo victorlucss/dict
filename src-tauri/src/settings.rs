@@ -439,13 +439,16 @@ impl TranscriptionHistory {
 
 // ─── Utilities ──────────────────────────────────────────
 
-/// Normalize transcribed text for matching: lowercase, trim/collapse whitespace,
-/// strip trailing punctuation.
+/// Normalize transcribed text for matching: lowercase, drop ALL punctuation
+/// (not just at the ends, so internal commas/periods/hyphens from Whisper don't
+/// break a trigger), and collapse whitespace.
 pub fn normalize_transcription(text: &str) -> String {
     let lower = text.to_lowercase();
-    let words: Vec<&str> = lower.split_whitespace().collect();
-    let joined = words.join(" ");
-    joined.trim_matches(|c: char| c.is_ascii_punctuation()).to_string()
+    let spaced: String = lower
+        .chars()
+        .map(|c| if c.is_ascii_punctuation() { ' ' } else { c })
+        .collect();
+    spaced.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// Semver comparison: returns true if remote > current
@@ -489,6 +492,9 @@ mod tests {
         assert_eq!(normalize_transcription("  Hello   World  "), "hello world");
         assert_eq!(normalize_transcription("Hello!"), "hello");
         assert_eq!(normalize_transcription("test."), "test");
+        // Internal punctuation is dropped so triggers still match.
+        assert_eq!(normalize_transcription("Take, a screenshot."), "take a screenshot");
+        assert_eq!(normalize_transcription("screen-shot"), "screen shot");
     }
 
     #[test]
