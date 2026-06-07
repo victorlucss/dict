@@ -26,6 +26,8 @@ pub enum LLMProvider {
     Openrouter,
     Ollama,
     Lmstudio,
+    /// Managed Dict Cloud cleanup — no API key; auth via an anonymous device id.
+    Dictcloud,
 }
 
 // ─── Settings Data ──────────────────────────────────────
@@ -69,6 +71,12 @@ pub struct SettingsData {
     pub audio_input_device: Option<String>,
     #[serde(default = "default_hotkey")]
     pub hotkey: String,
+    /// Dict Cloud session token (set after email one-time-code sign-in). Empty = signed out.
+    #[serde(default)]
+    pub dict_cloud_token: String,
+    /// Email of the signed-in Dict Cloud account (for display in Preferences).
+    #[serde(default)]
+    pub dict_cloud_email: String,
 }
 
 // ─── Default value functions ────────────────────────────
@@ -143,6 +151,8 @@ impl Default for SettingsData {
             onboarding_done: false,
             audio_input_device: None,
             hotkey: default_hotkey(),
+            dict_cloud_token: String::new(),
+            dict_cloud_email: String::new(),
         }
     }
 }

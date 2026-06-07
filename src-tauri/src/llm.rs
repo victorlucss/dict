@@ -19,7 +19,10 @@ pub async fn process(
     if settings.privacy_mode
         && matches!(
             settings.llm_provider,
-            LLMProvider::Openai | LLMProvider::Anthropic | LLMProvider::Openrouter
+            LLMProvider::Openai
+                | LLMProvider::Anthropic
+                | LLMProvider::Openrouter
+                | LLMProvider::Dictcloud
         )
     {
         tracing::info!(
@@ -29,12 +32,32 @@ pub async fn process(
         return text.to_string();
     }
 
+    // Dict Cloud: the managed backend builds the prompt and calls the upstream
+    // model, so the client just sends the raw text + context.
+    if matches!(settings.llm_provider, LLMProvider::Dictcloud) {
+        let client = Client::new();
+        return match call_dictcloud(&client, text, settings, frontmost_app, dictionary_entries).await
+        {
+            Ok(cleaned) if !cleaned.is_empty() => cleaned,
+            Ok(_) => {
+                tracing::warn!("Dict Cloud returned empty response, using raw transcription");
+                text.to_string()
+            }
+            Err(e) => {
+                tracing::warn!("Dict Cloud request failed: {}. Using raw transcription.", e);
+                text.to_string()
+            }
+        };
+    }
+
     let endpoint = match settings.llm_provider {
         LLMProvider::Openai => "https://api.openai.com/v1/chat/completions",
         LLMProvider::Anthropic => "https://api.anthropic.com/v1/messages",
         LLMProvider::Openrouter => "https://openrouter.ai/api/v1/chat/completions",
         LLMProvider::Ollama => "http://localhost:11434/v1/chat/completions",
         LLMProvider::Lmstudio => "http://localhost:1234/v1/chat/completions",
+        // Handled and returned above; never reaches here.
+        LLMProvider::Dictcloud => unreachable!("Dict Cloud is handled before this match"),
     };
 
     let system_prompt = build_system_prompt(settings, frontmost_app, dictionary_entries);
@@ -160,6 +183,62 @@ async fn call_anthropic(
 
     // Parse Anthropic response format
     data["content"][0]["text"]
+        .as_str()
+        .map(|s| s.trim().to_string())
+        .ok_or_else(|| format!("Unexpected response format: {}", data))
+}
+
+/// Dict Cloud base URL (Convex HTTP actions). The backend holds the upstream
+/// provider key, builds the system prompt server-side, and returns
+/// `{ "cleaned": "..." }` from `POST {base}/v1/clean`. Point this at your Convex
+/// deployment's HTTP URL (`https://<name>.convex.site`) or a custom domain.
+const DICT_CLOUD_ENDPOINT: &str = "https://api.dict.tianxu.cloud";
+
+/// Send raw transcription + context to Dict Cloud and return the cleaned text.
+/// Auth is an anonymous device id (rate-limiting only); no API key is sent.
+async fn call_dictcloud(
+    client: &Client,
+    text: &str,
+    settings: &SettingsData,
+    frontmost_app: &str,
+    dictionary_entries: &[String],
+) -> Result<String, String> {
+    if settings.dict_cloud_token.is_empty() {
+        return Err("Not signed in to Dict Cloud".to_string());
+    }
+
+    let body = json!({
+        "text": text,
+        "tone": settings.llm_tone,
+        "accuracy": settings.llm_accuracy.clamp(1, 5),
+        "app": frontmost_app,
+        "dictionary": dictionary_entries,
+        "codeMode": settings.code_mode,
+    });
+
+    let resp = client
+        .post(format!("{}/v1/clean", DICT_CLOUD_ENDPOINT))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", settings.dict_cloud_token))
+        .header("X-Dict-Version", env!("CARGO_PKG_VERSION"))
+        .timeout(Duration::from_secs(15))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    let status = resp.status();
+    let data: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    if status.as_u16() >= 400 {
+        tracing::error!("Dict Cloud returned {}: {}", status, data);
+        return Err(format!("HTTP {}", status));
+    }
+
+    data["cleaned"]
         .as_str()
         .map(|s| s.trim().to_string())
         .ok_or_else(|| format!("Unexpected response format: {}", data))

@@ -83,6 +83,8 @@ pub async fn list_llm_models(provider: String, endpoint: String, api_key: String
             }
             fetch_ids(req).await
         }
+        // Dict Cloud picks the model server-side — nothing to choose here.
+        "dictcloud" => Vec::new(),
         "ollama" => {
             // Ollama's authoritative model list is its native /api/tags endpoint
             // (present on every Ollama version). Try it first, then fall back to

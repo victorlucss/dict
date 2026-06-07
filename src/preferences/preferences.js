@@ -732,15 +732,25 @@ function loadValues(s) {
 
 function updateProviderFields() {
     const provider = document.getElementById('llmProvider').value;
+    const isDictCloud = provider === 'dictcloud';
     const isCloud = provider === 'openai' || provider === 'anthropic' || provider === 'openrouter';
 
     document.getElementById('llmEndpoint').disabled = true;
-    document.getElementById('apiKeyRow').style.display = isCloud ? 'flex' : 'none';
-
     document.getElementById('llmEndpoint').placeholder = PROVIDER_ENDPOINTS[provider] || '';
 
-    // Provider changed: re-fetch the available models for the new endpoint.
-    refreshModels();
+    // Dict Cloud is fully managed: no key, endpoint, or model to configure.
+    document.getElementById('apiKeyRow').style.display = isCloud ? 'flex' : 'none';
+    document.getElementById('endpointRow').style.display = isDictCloud ? 'none' : 'flex';
+    document.getElementById('modelRow').style.display = isDictCloud ? 'none' : 'flex';
+    document.getElementById('dictCloudNote').style.display = isDictCloud ? 'flex' : 'none';
+
+    // No model list to fetch for Dict Cloud; refreshModels persists for the
+    // others, so persist here when switching to Dict Cloud. (No-op during init.)
+    if (isDictCloud) {
+        autoSave();
+    } else {
+        refreshModels();
+    }
 }
 
 // Fetch the available models for the SELECTED provider and rebuild the #llmModel

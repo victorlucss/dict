@@ -227,6 +227,7 @@
                         </div>
                         <div class="setting-control">
                             <select id="llmProvider">
+                                <option value="dictcloud" data-desc="Managed — no setup, no API key">Dict Cloud</option>
                                 <option value="openai" data-desc="Cloud — GPT models from OpenAI">OpenAI</option>
                                 <option value="anthropic" data-desc="Cloud — Claude models from Anthropic">Anthropic</option>
                                 <option value="openrouter" data-desc="Cloud — lots of models in one place">OpenRouter</option>
@@ -235,7 +236,13 @@
                             </select>
                         </div>
                     </div>
-                    <div class="setting-row">
+                    <div class="setting-row" id="dictCloudNote">
+                        <div class="setting-info">
+                            <div class="setting-title">No setup needed</div>
+                            <div class="setting-desc">Dict Cloud cleans up your transcriptions on our servers — no model, key, or endpoint to configure. Your audio never leaves your Mac; only the transcribed text is sent.</div>
+                        </div>
+                    </div>
+                    <div class="setting-row" id="modelRow">
                         <div class="setting-info">
                             <div class="setting-title">Model</div>
                             <div class="setting-desc">Which model to use. Pick one from the list, or type the exact name your provider expects.</div>
