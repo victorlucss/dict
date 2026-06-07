@@ -11,6 +11,14 @@
     <div class="prefs-container">
         <nav class="sidebar" data-tauri-drag-region>
             <div class="nav-group">
+                <button class="sidebar-btn" data-section="account" data-title="Account">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    </span> Account
+                </button>
+            </div>
+
+            <div class="nav-group">
                 <div class="nav-group-title">Dictation</div>
                 <button class="sidebar-btn active" data-section="general" data-title="General">
                     <span class="icon" aria-hidden="true">
@@ -61,6 +69,35 @@
 
         <main class="content">
             <h1 id="section-title">General</h1>
+
+            <!-- Account Section (Dict Cloud sign-in) -->
+            <div class="section hidden" id="section-account">
+                <p class="section-desc">Sign in to Dict Cloud to clean up transcriptions on our servers — no model, key, or endpoint to set up. Your audio never leaves your Mac; only the transcribed text is sent.</p>
+                <div class="card">
+                    <!-- Signed-out: email + password -->
+                    <div id="dcSignedOut" class="dc-panel">
+                        <div class="add-row">
+                            <input type="email" id="dcEmail" placeholder="you@example.com" autocomplete="email">
+                        </div>
+                        <div class="add-row">
+                            <input type="password" id="dcPassword" placeholder="Password (8+ characters)" autocomplete="current-password">
+                        </div>
+                        <div class="dc-actions">
+                            <button type="button" class="btn-primary" id="dcSignIn">Sign in</button>
+                            <button type="button" class="btn-secondary" id="dcSignUp">Create account</button>
+                        </div>
+                        <div class="dc-status hidden" id="dcStatus"></div>
+                        <div class="control-error hidden" id="dcError"></div>
+                    </div>
+                    <!-- Signed-in -->
+                    <div id="dcSignedIn" class="dc-panel hidden">
+                        <div class="dc-account">
+                            <span class="dc-account-label">Signed in as <strong id="dcEmailLabel"></strong></span>
+                            <button type="button" class="btn-secondary danger" id="dcSignOut">Sign out</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- General Section -->
             <div class="section" id="section-general">
@@ -236,34 +273,10 @@
                             </select>
                         </div>
                     </div>
-                    <div class="setting-row setting-row-stacked" id="dictCloudNote">
+                    <div class="setting-row" id="dictCloudNote">
                         <div class="setting-info">
-                            <div class="setting-title">Dict Cloud account</div>
-                            <div class="setting-desc">Sign in to clean up transcriptions on our servers — no model, key, or endpoint to set up. Your audio never leaves your Mac; only the transcribed text is sent.</div>
-                        </div>
-                        <div class="setting-control setting-control-full">
-                            <!-- Signed-out: email + password -->
-                            <div id="dcSignedOut">
-                                <div class="add-row">
-                                    <input type="email" id="dcEmail" placeholder="you@example.com" autocomplete="email">
-                                </div>
-                                <div class="add-row">
-                                    <input type="password" id="dcPassword" placeholder="Password (8+ characters)" autocomplete="current-password">
-                                </div>
-                                <div class="dc-actions">
-                                    <button type="button" class="btn-primary" id="dcSignIn">Sign in</button>
-                                    <button type="button" class="btn-secondary" id="dcSignUp">Create account</button>
-                                </div>
-                                <div class="dc-status hidden" id="dcStatus"></div>
-                                <div class="control-error hidden" id="dcError"></div>
-                            </div>
-                            <!-- Signed-in -->
-                            <div id="dcSignedIn" class="hidden">
-                                <div class="dc-account">
-                                    <span class="dc-account-label">Signed in as <strong id="dcEmailLabel"></strong></span>
-                                    <button type="button" class="btn-secondary danger" id="dcSignOut">Sign out</button>
-                                </div>
-                            </div>
+                            <div class="setting-title">No setup needed</div>
+                            <div class="setting-desc">Dict Cloud cleans up transcriptions on our servers — no model, key, or endpoint to configure. Manage your sign-in under the <strong>Account</strong> tab.</div>
                         </div>
                     </div>
                     <div class="setting-row" id="modelRow">

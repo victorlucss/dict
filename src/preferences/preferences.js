@@ -352,6 +352,7 @@ document.querySelectorAll('.sidebar-btn').forEach(btn => {
         document.getElementById(`section-${section}`).classList.remove('hidden');
 
         // Lazy-load each section's data when it is opened
+        if (section === 'account') updateDictCloudAccount();
         if (section === 'speech') { refreshAudioDevices(); refreshWhisperModels(); }
         if (section === 'llm') refreshModels();
         if (section === 'history') loadHistory();
@@ -744,6 +745,7 @@ async function init() {
     ['hotkeyMode', 'language', 'llmProvider', 'llmModel', 'overlayPosition', 'audioDevice', 'whisperModelSelect']
         .forEach(id => enhanceSelect(document.getElementById(id)));
     updateProviderFields();
+    updateDictCloudAccount();
     // Fetch the available models for the current endpoint. The saved model is
     // already present as an option (added in loadValues), so it stays selectable
     // even before/if the fetch returns.
@@ -806,7 +808,6 @@ function updateProviderFields() {
     document.getElementById('endpointRow').style.display = isDictCloud ? 'none' : 'flex';
     document.getElementById('modelRow').style.display = isDictCloud ? 'none' : 'flex';
     document.getElementById('dictCloudNote').style.display = isDictCloud ? 'flex' : 'none';
-    if (isDictCloud) updateDictCloudAccount();
 
     // No model list to fetch for Dict Cloud; refreshModels persists for the
     // others, so persist here when switching to Dict Cloud. (No-op during init.)
