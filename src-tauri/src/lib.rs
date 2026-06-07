@@ -81,6 +81,15 @@ fn save_settings(
     }
 
     let mut s = state.settings.lock().map_err(|e| e.to_string())?;
+    // The Preferences form never sends the Dict Cloud session token/email, so
+    // preserve them across auto-saves (only the auth commands change them).
+    let mut data = data;
+    if data.dict_cloud_token.is_empty() {
+        data.dict_cloud_token = s.data.dict_cloud_token.clone();
+    }
+    if data.dict_cloud_email.is_empty() {
+        data.dict_cloud_email = s.data.dict_cloud_email.clone();
+    }
     s.data = data;
     s.save().map_err(|e| e.to_string())
 }
@@ -389,6 +398,70 @@ fn show_accessibility_alert(_app: &AppHandle) {
     let _ = std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
         .spawn();
+}
+
+/// Dict Cloud: email a one-time sign-in code.
+#[tauri::command]
+async fn dict_cloud_request_code(email: String) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/auth/request-code", llm::DICT_CLOUD_ENDPOINT))
+        .json(&serde_json::json!({ "email": email }))
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(|e| format!("Couldn't reach Dict Cloud: {}", e))?;
+    if !resp.status().is_success() {
+        return Err("Couldn't send the code. Check the email and try again.".to_string());
+    }
+    Ok(())
+}
+
+/// Dict Cloud: verify the code, store the returned session token + email.
+#[tauri::command]
+async fn dict_cloud_verify(
+    app: tauri::AppHandle,
+    email: String,
+    code: String,
+) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/auth/verify", llm::DICT_CLOUD_ENDPOINT))
+        .json(&serde_json::json!({ "email": email, "code": code }))
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(|e| format!("Couldn't reach Dict Cloud: {}", e))?;
+
+    let status = resp.status();
+    let data: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Unexpected response: {}", e))?;
+    if !status.is_success() {
+        return Err("That code didn't work — double-check it and try again.".to_string());
+    }
+    let token = data["token"]
+        .as_str()
+        .ok_or("No token in response")?
+        .to_string();
+
+    let state = app.state::<AppState>();
+    let mut s = state.settings.lock().map_err(|e| e.to_string())?;
+    s.data.dict_cloud_token = token;
+    s.data.dict_cloud_email = email.clone();
+    s.save().map_err(|e| e.to_string())?;
+    Ok(email)
+}
+
+/// Dict Cloud: sign out (clear the stored token + email).
+#[tauri::command]
+fn dict_cloud_sign_out(app: tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let mut s = state.settings.lock().map_err(|e| e.to_string())?;
+    s.data.dict_cloud_token.clear();
+    s.data.dict_cloud_email.clear();
+    s.save().map_err(|e| e.to_string())
 }
 
 /// Command: the copy-fallback popup pulls (and clears) its transcription on load.
@@ -942,6 +1015,9 @@ pub fn run() {
             open_accessibility_settings,
             open_config_file,
             get_fallback_text,
+            dict_cloud_request_code,
+            dict_cloud_verify,
+            dict_cloud_sign_out,
             models::list_llm_models,
             models::list_whisper_models,
             models::download_whisper_model,

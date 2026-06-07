@@ -236,10 +236,32 @@
                             </select>
                         </div>
                     </div>
-                    <div class="setting-row" id="dictCloudNote">
+                    <div class="setting-row setting-row-stacked" id="dictCloudNote">
                         <div class="setting-info">
-                            <div class="setting-title">No setup needed</div>
-                            <div class="setting-desc">Dict Cloud cleans up your transcriptions on our servers — no model, key, or endpoint to configure. Your audio never leaves your Mac; only the transcribed text is sent.</div>
+                            <div class="setting-title">Dict Cloud account</div>
+                            <div class="setting-desc">Sign in to clean up transcriptions on our servers — no model, key, or endpoint to set up. Your audio never leaves your Mac; only the transcribed text is sent.</div>
+                        </div>
+                        <div class="setting-control setting-control-full">
+                            <!-- Signed-out: email → one-time code -->
+                            <div id="dcSignedOut">
+                                <div class="add-row">
+                                    <input type="email" id="dcEmail" placeholder="you@example.com" autocomplete="email">
+                                    <button type="button" class="btn-secondary" id="dcSendCode">Send code</button>
+                                </div>
+                                <div class="add-row hidden" id="dcCodeRow">
+                                    <input type="text" id="dcCode" placeholder="6-digit code" inputmode="numeric" maxlength="6">
+                                    <button type="button" class="btn-primary" id="dcVerify">Verify</button>
+                                </div>
+                                <div class="dc-status hidden" id="dcStatus"></div>
+                                <div class="control-error hidden" id="dcError"></div>
+                            </div>
+                            <!-- Signed-in -->
+                            <div id="dcSignedIn" class="hidden">
+                                <div class="dc-account">
+                                    <span class="dc-account-label">Signed in as <strong id="dcEmailLabel"></strong></span>
+                                    <button type="button" class="btn-secondary danger" id="dcSignOut">Sign out</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="setting-row" id="modelRow">

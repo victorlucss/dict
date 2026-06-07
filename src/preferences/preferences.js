@@ -382,6 +382,83 @@ document.querySelectorAll('#accuracyCards .tone-card').forEach(card => {
 // Provider changes
 document.getElementById('llmProvider').addEventListener('change', updateProviderFields);
 
+// ----- Dict Cloud account (email one-time-code sign-in) -------------------
+function dcShowError(msg) {
+    const el = document.getElementById('dcError');
+    el.textContent = msg || '';
+    el.classList.toggle('hidden', !msg);
+}
+
+function dcShowStatus(msg) {
+    const el = document.getElementById('dcStatus');
+    el.textContent = msg || '';
+    el.classList.toggle('hidden', !msg);
+}
+
+// Reflect signed-in vs signed-out state from currentSettings.
+function updateDictCloudAccount() {
+    const email = currentSettings?.dictCloudEmail || '';
+    const signedIn = !!email;
+    document.getElementById('dcSignedIn').classList.toggle('hidden', !signedIn);
+    document.getElementById('dcSignedOut').classList.toggle('hidden', signedIn);
+    if (signedIn) {
+        document.getElementById('dcEmailLabel').textContent = email;
+    } else {
+        document.getElementById('dcCodeRow').classList.add('hidden');
+        dcShowStatus(null);
+        dcShowError(null);
+    }
+}
+
+document.getElementById('dcSendCode')?.addEventListener('click', async () => {
+    const email = document.getElementById('dcEmail').value.trim();
+    if (!email || !email.includes('@')) { dcShowError('Enter a valid email address.'); return; }
+    dcShowError(null);
+    const btn = document.getElementById('dcSendCode');
+    btn.disabled = true;
+    try {
+        await invoke('dict_cloud_request_code', { email });
+        document.getElementById('dcCodeRow').classList.remove('hidden');
+        dcShowStatus(`We sent a code to ${email}. Enter it below.`);
+        document.getElementById('dcCode').focus();
+    } catch (e) {
+        dcShowError(typeof e === 'string' ? e : 'Could not send the code.');
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+document.getElementById('dcVerify')?.addEventListener('click', async () => {
+    const email = document.getElementById('dcEmail').value.trim();
+    const code = document.getElementById('dcCode').value.trim();
+    if (!code) { dcShowError('Enter the 6-digit code.'); return; }
+    dcShowError(null);
+    const btn = document.getElementById('dcVerify');
+    btn.disabled = true;
+    try {
+        await invoke('dict_cloud_verify', { email, code });
+        // Refresh settings so the signed-in email shows and auto-save preserves the token.
+        currentSettings = await invoke('get_settings');
+        document.getElementById('dcEmail').value = '';
+        document.getElementById('dcCode').value = '';
+        updateDictCloudAccount();
+    } catch (e) {
+        dcShowError(typeof e === 'string' ? e : 'That code did not work.');
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+document.getElementById('dcSignOut')?.addEventListener('click', async () => {
+    try {
+        await invoke('dict_cloud_sign_out');
+        currentSettings = await invoke('get_settings');
+        updateDictCloudAccount();
+    } catch (e) {
+        dcShowError(typeof e === 'string' ? e : 'Could not sign out.');
+    }
+});
+
 // ----- Tone preset cards --------------------------------------------------
 // Three selectable cards mapped to the `llmTone` setting. The selected value is
 // mirrored into the hidden #llmTone input that collectSettings reads.
@@ -743,6 +820,7 @@ function updateProviderFields() {
     document.getElementById('endpointRow').style.display = isDictCloud ? 'none' : 'flex';
     document.getElementById('modelRow').style.display = isDictCloud ? 'none' : 'flex';
     document.getElementById('dictCloudNote').style.display = isDictCloud ? 'flex' : 'none';
+    if (isDictCloud) updateDictCloudAccount();
 
     // No model list to fetch for Dict Cloud; refreshModels persists for the
     // others, so persist here when switching to Dict Cloud. (No-op during init.)

@@ -490,6 +490,34 @@ textarea:focus {
     display: none;
 }
 
+/* Dict Cloud account panel */
+.dc-status {
+    font-size: 12px;
+    color: rgba(235, 235, 245, 0.6);
+    margin-top: 6px;
+}
+
+.dc-status.hidden {
+    display: none;
+}
+
+.dc-account {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.dc-account-label {
+    font-size: 13px;
+    color: #e6e6e6;
+}
+
+.dc-account-label strong {
+    color: #f2f2f4;
+    font-weight: 600;
+}
+
 /* Buttons */
 .btn-primary {
     padding: 7px 22px;
