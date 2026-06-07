@@ -362,8 +362,21 @@ impl VoiceCommandsStore {
 
     pub fn match_trigger(&self, transcription: &str) -> Option<String> {
         let normalized = normalize_transcription(transcription);
+        // Prefer an exact match (the whole utterance is the trigger).
         for cmd in &self.entries {
             if normalize_transcription(&cmd.trigger) == normalized {
+                return Some(cmd.key_combo.clone());
+            }
+        }
+        // Otherwise fire if the utterance contains the trigger as whole words
+        // (e.g. "okay, take a screenshot now" still triggers "take a screenshot").
+        let haystack = format!(" {} ", normalized);
+        for cmd in &self.entries {
+            let trigger = normalize_transcription(&cmd.trigger);
+            if trigger.is_empty() {
+                continue;
+            }
+            if haystack.contains(&format!(" {} ", trigger)) {
                 return Some(cmd.key_combo.clone());
             }
         }
@@ -495,6 +508,25 @@ mod tests {
         // Internal punctuation is dropped so triggers still match.
         assert_eq!(normalize_transcription("Take, a screenshot."), "take a screenshot");
         assert_eq!(normalize_transcription("screen-shot"), "screen shot");
+    }
+
+    #[test]
+    fn test_command_match_contains() {
+        let mut store = VoiceCommandsStore {
+            entries: vec![VoiceCommand {
+                trigger: "take a screenshot".to_string(),
+                key_combo: "cmd+shift+3".to_string(),
+            }],
+            file_path: std::path::PathBuf::from("/tmp/__dict_test_commands.json"),
+        };
+        // Exact, with punctuation/case.
+        assert_eq!(store.match_trigger("Take a screenshot."), Some("cmd+shift+3".to_string()));
+        // Contained as whole words.
+        assert_eq!(store.match_trigger("okay, take a screenshot now"), Some("cmd+shift+3".to_string()));
+        // Not a whole-word match / unrelated.
+        assert_eq!(store.match_trigger("screenshots are nice"), None);
+        assert_eq!(store.match_trigger("hello there"), None);
+        let _ = store.save();
     }
 
     #[test]
