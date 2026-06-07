@@ -7,7 +7,9 @@ const ICONS = {
     shield: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>`,
     download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
     keyboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>`,
-    check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`
+    check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`,
+    sparkles: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>`,
+    sliders: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>`
 };
 
 // ---- Model catalog presented in the picker ----
@@ -17,14 +19,50 @@ const MODEL_OPTIONS = [
     { name: 'medium', label: 'Medium', size: '~1.5 GB', desc: 'Most accurate, slower and larger.' }
 ];
 
+// ---- "Which of these sound like you?" chips (mental-model opener). ----
+const RESONATE = [
+    'My wrists are tired of typing',
+    'I think faster than I type',
+    'My messages pile up',
+    'I jump between English and Português',
+    'I write a lot of code',
+    'I just want to try it',
+];
+
+// ---- Personalization options ----
+const LANGUAGES = [
+    { value: 'en', label: 'English' },
+    { value: 'pt', label: 'Português' },
+    { value: 'auto', label: 'Auto-detect' },
+];
+const TONES = [
+    { value: 'formal', label: 'Formal', desc: 'Full punctuation and capitals' },
+    { value: 'casual', label: 'Casual', desc: 'Lighter, friendlier punctuation' },
+    { value: 'veryCasual', label: 'Relaxed', desc: 'mostly lowercase, minimal punctuation' },
+];
+
 // ---- Step definitions ----
 const STEP = {
     welcome: {
         id: 'welcome',
         icon: ICONS.mic,
         title: 'Welcome to Dict',
-        description: 'Talk and Dict types it out, in any app. Hold <kbd>Option</kbd> + <kbd>Space</kbd> anywhere to start dictating.',
+        description: 'Talk, and Dict types it out in any app. Hold <kbd>Option</kbd> + <kbd>Space</kbd>, speak, and clean text lands wherever your cursor is. This takes about a minute.',
         action: 'Get Started'
+    },
+    resonate: {
+        id: 'resonate',
+        icon: ICONS.sparkles,
+        title: 'What brings you to Dict?',
+        description: 'Pick whatever sounds like you. It just helps us say hello, nothing here is locked in.',
+        action: 'Continue'
+    },
+    personalize: {
+        id: 'personalize',
+        icon: ICONS.sliders,
+        title: 'Make it yours',
+        description: 'Choose your language and how polished the text should read. You can change both anytime in Preferences.',
+        action: 'Continue'
     },
     accessibility: {
         id: 'accessibility',
@@ -79,6 +117,14 @@ const modelAction = document.getElementById('modelAction');
 const tryitBox = document.getElementById('tryitBox');
 const tryitResult = document.getElementById('tryitResult');
 
+const resonateBox = document.getElementById('resonateBox');
+const personalizeBox = document.getElementById('personalizeBox');
+
+// Resonate selections (engagement only) + personalization choices.
+const resonatePicks = new Set();
+let personaLang = 'en';
+let personaTone = 'formal';
+
 primaryBtn.addEventListener('click', handlePrimary);
 secondaryBtn.addEventListener('click', () => advance());
 
@@ -89,12 +135,21 @@ async function init() {
         platform = 'macos';
     }
 
+    // Preload current settings so the personalize step starts on the saved values.
+    try {
+        const s = await invoke('get_settings');
+        if (s) {
+            if (s.whisperLanguage) personaLang = s.whisperLanguage;
+            if (s.llmTone) personaTone = s.llmTone;
+        }
+    } catch (e) { /* defaults are fine */ }
+
     if (platform === 'macos') {
-        steps = [STEP.welcome, STEP.accessibility, STEP.model, STEP.tryit];
+        steps = [STEP.welcome, STEP.resonate, STEP.accessibility, STEP.model, STEP.personalize, STEP.tryit];
     } else {
-        steps = [STEP.welcome, STEP.model, STEP.tryit];
+        steps = [STEP.welcome, STEP.resonate, STEP.model, STEP.personalize, STEP.tryit];
         // Swap shortcut copy for non-macOS.
-        STEP.welcome.description = `Talk and Dict types it out, in any app. Hold ${OTHER_SHORTCUT} anywhere to start dictating.`;
+        STEP.welcome.description = `Talk, and Dict types it out in any app. Hold ${OTHER_SHORTCUT}, speak, and clean text lands wherever your cursor is. This takes about a minute.`;
         STEP.tryit.description = `Hold ${OTHER_SHORTCUT}, say a sentence, then let go. Your words show up below.`;
     }
 
@@ -126,8 +181,10 @@ function renderStep() {
     // Reset interactive panels.
     modelPicker.classList.add('hidden');
     tryitBox.classList.add('hidden');
+    resonateBox.classList.add('hidden');
+    personalizeBox.classList.add('hidden');
 
-    indicatorEl.textContent = `${currentStep + 1} of ${steps.length}`;
+    indicatorEl.textContent = stepIndicatorText();
 
     // Drive the top progress bar and replay the step-reveal animation.
     if (progressEl) progressEl.style.width = `${((currentStep + 1) / steps.length) * 100}%`;
@@ -141,8 +198,99 @@ function renderStep() {
         setupAccessibilityStep();
     } else if (step.id === 'model') {
         setupModelStep();
+    } else if (step.id === 'resonate') {
+        setupResonateStep();
+    } else if (step.id === 'personalize') {
+        setupPersonalizeStep();
     } else if (step.id === 'tryit') {
         tryitBox.classList.remove('hidden');
+    }
+}
+
+// Momentum-style indicator: a plain count early, encouragement near the end.
+function stepIndicatorText() {
+    const n = currentStep + 1;
+    const total = steps.length;
+    if (n === total) return 'Last step';
+    if (n === total - 1) return 'Almost there';
+    return `Step ${n} of ${total}`;
+}
+
+// ---------------- Resonate step (mental-model opener) ----------------
+
+function setupResonateStep() {
+    resonateBox.classList.remove('hidden');
+    resonateBox.innerHTML = '';
+    RESONATE.forEach((label) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip' + (resonatePicks.has(label) ? ' selected' : '');
+        chip.textContent = label;
+        chip.addEventListener('click', () => {
+            if (resonatePicks.has(label)) resonatePicks.delete(label);
+            else resonatePicks.add(label);
+            chip.classList.toggle('selected');
+        });
+        resonateBox.appendChild(chip);
+    });
+}
+
+// ---------------- Personalize step ----------------
+
+function setupPersonalizeStep() {
+    personalizeBox.classList.remove('hidden');
+    personalizeBox.innerHTML = '';
+
+    const langGroup = document.createElement('div');
+    langGroup.className = 'persona-group';
+    langGroup.innerHTML = '<div class="persona-label">Language</div>';
+    const langRow = document.createElement('div');
+    langRow.className = 'chip-row';
+    LANGUAGES.forEach((l) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip' + (personaLang === l.value ? ' selected' : '');
+        chip.textContent = l.label;
+        chip.addEventListener('click', () => {
+            personaLang = l.value;
+            langRow.querySelectorAll('.chip').forEach((c) => c.classList.remove('selected'));
+            chip.classList.add('selected');
+        });
+        langRow.appendChild(chip);
+    });
+    langGroup.appendChild(langRow);
+    personalizeBox.appendChild(langGroup);
+
+    const toneGroup = document.createElement('div');
+    toneGroup.className = 'persona-group';
+    toneGroup.innerHTML = '<div class="persona-label">Tone</div>';
+    const toneList = document.createElement('div');
+    toneList.className = 'persona-cards';
+    TONES.forEach((t) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'persona-card' + (personaTone === t.value ? ' selected' : '');
+        card.innerHTML = `<span class="model-radio"></span><span class="model-body"><span class="model-name">${t.label}</span><span class="model-desc">${t.desc}</span></span>`;
+        card.addEventListener('click', () => {
+            personaTone = t.value;
+            toneList.querySelectorAll('.persona-card').forEach((c) => c.classList.remove('selected'));
+            card.classList.add('selected');
+        });
+        toneList.appendChild(card);
+    });
+    toneGroup.appendChild(toneList);
+    personalizeBox.appendChild(toneGroup);
+}
+
+// Persist the personalization choices (language + tone) to settings.
+async function persistPersonalization() {
+    try {
+        const settings = await invoke('get_settings');
+        settings.whisperLanguage = personaLang;
+        settings.llmTone = personaTone;
+        await invoke('save_settings', { data: settings });
+    } catch (e) {
+        console.error('Failed to persist personalization', e);
     }
 }
 
@@ -395,6 +543,12 @@ async function handlePrimary() {
             const ok = await downloadSelected();
             if (ok) advance();
         }
+        return;
+    }
+
+    if (step.id === 'personalize') {
+        await persistPersonalization();
+        advance();
         return;
     }
 

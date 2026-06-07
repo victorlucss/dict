@@ -304,6 +304,126 @@ h1 {
     text-align: center;
 }
 
+/* ---- Resonate chips (mental-model opener) ---- */
+.resonate {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 9px;
+    width: 100%;
+    max-width: 440px;
+    margin-top: 22px;
+}
+
+.chip {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: #e6e6e6;
+    background: #2a2a2c;
+    border: 1.5px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 8px 15px;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.chip:hover {
+    background: #303032;
+}
+
+.chip.selected {
+    border-color: #4da3ff;
+    background: rgba(77, 163, 255, 0.12);
+    color: #ffffff;
+}
+
+/* ---- Personalize step ---- */
+.personalize {
+    width: 100%;
+    max-width: 400px;
+    margin-top: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.persona-group {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.persona-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(235, 235, 245, 0.4);
+    text-align: left;
+}
+
+.chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+}
+
+.persona-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.persona-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+    width: 100%;
+    background: #2a2a2c;
+    border: 1.5px solid rgba(255, 255, 255, 0.08);
+    border-radius: 11px;
+    padding: 11px 14px;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+}
+
+.persona-card:hover {
+    background: #303032;
+}
+
+.persona-card.selected {
+    border-color: #4da3ff;
+    background: rgba(77, 163, 255, 0.08);
+}
+
+.persona-card .model-radio {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.25);
+    flex-shrink: 0;
+    position: relative;
+}
+
+.persona-card.selected .model-radio {
+    border-color: #4da3ff;
+}
+
+.persona-card.selected .model-radio::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border-radius: 50%;
+    background: #4da3ff;
+}
+
+.persona-card .model-body {
+    display: flex;
+    flex-direction: column;
+}
+
 /* ---- Try it ---- */
 .tryit {
     width: 100%;
