@@ -192,7 +192,7 @@ async fn call_anthropic(
 /// provider key, builds the system prompt server-side, and returns
 /// `{ "cleaned": "..." }` from `POST {base}/v1/clean`. Point this at your Convex
 /// deployment's HTTP URL (`https://<name>.convex.site`) or a custom domain.
-pub(crate) const DICT_CLOUD_ENDPOINT: &str = "https://dusty-vole-771.convex.site";
+pub(crate) const DICT_CLOUD_ENDPOINT: &str = "https://dazzling-cat-37.convex.site";
 
 /// Send raw transcription + context to Dict Cloud and return the cleaned text.
 /// Auth is an anonymous device id (rate-limiting only); no API key is sent.
