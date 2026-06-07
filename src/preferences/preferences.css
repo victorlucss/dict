@@ -40,54 +40,56 @@ body {
 
 /* Sidebar — translucent so the macOS vibrancy material shows through it. */
 .sidebar {
-    width: 188px;
-    min-width: 188px;
+    width: 204px;
+    min-width: 204px;
     background: rgba(255, 255, 255, 0.04);
-    padding: 36px 10px 12px;
+    padding: 36px 12px 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 16px;
 }
 
 .nav-group {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
 }
 
 .nav-group-title {
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
-    color: rgba(235, 235, 245, 0.45);
-    padding: 3px 10px;
+    color: rgba(235, 235, 245, 0.4);
+    padding: 0 10px 6px;
 }
 
 .sidebar-btn {
     display: flex;
     align-items: center;
-    gap: 9px;
-    padding: 5px 10px;
+    gap: 11px;
+    padding: 7px 11px;
     background: none;
-    border: none;
-    border-radius: 7px;
+    border: 1px solid transparent;
+    border-radius: 8px;
     color: #dcdce0;
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 450;
     cursor: pointer;
     text-align: left;
     width: 100%;
     -webkit-app-region: no-drag;
-    transition: background 0.15s ease, color 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .sidebar-btn:hover {
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .sidebar-btn.active {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.09);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
     color: #ffffff;
 }
 
@@ -521,16 +523,167 @@ textarea:focus {
     max-width: 460px;
 }
 
-/* Account (Dict Cloud) panel: even vertical rhythm inside the card. */
+/* Account (Dict Cloud) panel: tight sign-in form. */
 .dc-panel {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 14px 0;
+    padding: 16px 0;
 }
 
-.dc-panel .add-row {
-    margin: 0;
+.dc-input {
+    width: 100%;
+}
+
+.dc-submit {
+    width: 100%;
+    margin-top: 2px;
+}
+
+.dc-switch {
+    margin-top: 4px;
+    font-size: 12px;
+    color: rgba(235, 235, 245, 0.55);
+    text-align: center;
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #e6e6e6;
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    -webkit-app-region: no-drag;
+}
+
+.link-btn:hover {
+    color: #ffffff;
+}
+
+/* ----- Bottom sheet (sign-up) ----- */
+.sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: sheet-fade 0.2s ease;
+}
+
+.sheet-backdrop.hidden {
+    display: none;
+}
+
+@keyframes sheet-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.sheet {
+    width: 100%;
+    background: #1c1c1e;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px 16px 0 0;
+    padding: 10px 28px 26px;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    animation: sheet-up 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+.sheet-grip {
+    align-self: center;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.2);
+    margin-bottom: 6px;
+}
+
+.sheet-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.sheet-desc {
+    font-size: 12px;
+    line-height: 1.4;
+    color: rgba(235, 235, 245, 0.55);
+    margin-bottom: 4px;
+}
+
+.sheet-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+/* ----- Usage section (Account) ----- */
+#dcUsageCard {
+    padding: 0 16px 8px;
+}
+
+.usage-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 0 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #f2f2f4;
+}
+
+.usage-icon {
+    display: inline-flex;
+    color: rgba(235, 235, 245, 0.7);
+}
+
+.usage-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.usage-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    font-size: 13px;
+}
+
+.usage-label {
+    color: #f2f2f4;
+}
+
+.usage-value {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    color: rgba(235, 235, 245, 0.6);
+}
+
+.usage-value strong {
+    color: #f2f2f4;
+    font-weight: 600;
+}
+
+.usage-sub {
+    font-size: 12px;
+    color: rgba(235, 235, 245, 0.45);
 }
 
 .dc-actions {
@@ -784,6 +937,16 @@ textarea:focus {
     white-space: nowrap;
 }
 
+.history-cloud {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: rgba(235, 235, 245, 0.45);
+    cursor: default;
+}
+
 .history-copy {
     display: inline-flex;
     align-items: center;
@@ -1031,4 +1194,5 @@ select.has-custom-select {
     .section:not(.hidden) { animation: none; }
     .btn-ring.indeterminate svg { animation: none; }
     .custom-select-chevron { transition: none; }
+    .sheet, .sheet-backdrop { animation: none; }
 }

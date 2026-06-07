@@ -179,6 +179,9 @@ pub struct HistoryEntry {
     pub cleaned: String,
     pub app: String,
     pub engine: String,
+    /// True when this transcription was refined through Dict Cloud (left the device).
+    #[serde(default)]
+    pub cloud: bool,
 }
 
 // ─── App Settings (persistence) ─────────────────────────
@@ -395,13 +398,14 @@ impl TranscriptionHistory {
         }
     }
 
-    pub fn add(&mut self, raw: &str, cleaned: &str, app: &str, engine: &str) {
+    pub fn add(&mut self, raw: &str, cleaned: &str, app: &str, engine: &str, cloud: bool) {
         let entry = HistoryEntry {
             timestamp: chrono::Utc::now().to_rfc3339(),
             raw: raw.to_string(),
             cleaned: cleaned.to_string(),
             app: app.to_string(),
             engine: engine.to_string(),
+            cloud,
         };
         self.entries.push(entry);
         if self.entries.len() > self.max_entries {

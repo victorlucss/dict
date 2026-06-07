@@ -397,12 +397,14 @@ function dcShowStatus(msg) {
 }
 
 // Reflect signed-in vs signed-out state from currentSettings, and (when signed
-// in) show whether the account has Dict Cloud cleanup access (a feature flag).
+// in) show cloud access + a Usage section (today's usage against the plan limit).
 async function updateDictCloudAccount() {
     const email = currentSettings?.dictCloudEmail || '';
     const signedIn = !!email;
     document.getElementById('dcSignedIn').classList.toggle('hidden', !signedIn);
     document.getElementById('dcSignedOut').classList.toggle('hidden', signedIn);
+    const usageCard = document.getElementById('dcUsageCard');
+    usageCard.classList.add('hidden');
     if (!signedIn) {
         dcShowStatus(null);
         dcShowError(null);
@@ -421,9 +423,21 @@ async function updateDictCloudAccount() {
         const limit = status ? status.dailyLimit : null; // null = unlimited
         const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
         if (enabled) {
-            const usageStr = limit === null ? 'unlimited today' : `${used}/${limit} today`;
-            accessEl.innerHTML = `✓ Cloud cleanup enabled · <strong>${planLabel}</strong> plan · ${usageStr}`;
+            accessEl.textContent = '✓ Cloud cleanup is enabled for your account.';
             accessEl.classList.add('enabled');
+            // Populate the Usage section.
+            const pctEl = document.getElementById('dcUsagePct');
+            const subEl = document.getElementById('dcUsageSub');
+            if (limit === null) {
+                pctEl.textContent = 'Unlimited';
+                subEl.textContent = `${used} today`;
+            } else {
+                const remaining = Math.max(0, Math.round(((limit - used) / limit) * 100));
+                pctEl.textContent = `${remaining}%`;
+                subEl.textContent = `${used} of ${limit} used`;
+            }
+            document.getElementById('dcUsagePlan').textContent = planLabel;
+            usageCard.classList.remove('hidden');
         } else {
             accessEl.textContent = "Dict Cloud cleanup isn't enabled for your account yet. You're on the list, we'll turn it on soon.";
         }
@@ -432,31 +446,80 @@ async function updateDictCloudAccount() {
     }
 }
 
-// Shared sign-in / sign-up handler.
-async function dcAuth(command) {
+// Sign in with email + password.
+async function dcSignIn() {
     const email = document.getElementById('dcEmail').value.trim();
     const password = document.getElementById('dcPassword').value;
     if (!email || !email.includes('@')) { dcShowError('Enter a valid email address.'); return; }
-    if (!password || password.length < 8) { dcShowError('Password must be at least 8 characters.'); return; }
+    if (!password) { dcShowError('Enter your password.'); return; }
     dcShowError(null);
-    const buttons = [document.getElementById('dcSignIn'), document.getElementById('dcSignUp')];
-    buttons.forEach((b) => (b.disabled = true));
+    const btn = document.getElementById('dcSignIn');
+    btn.disabled = true;
     try {
-        await invoke(command, { email, password });
+        await invoke('dict_cloud_sign_in', { email, password });
         // Refresh settings so the signed-in email shows and auto-save preserves the token.
         currentSettings = await invoke('get_settings');
-        document.getElementById('dcEmail').value = '';
         document.getElementById('dcPassword').value = '';
+        dcShowStatus(null);
         updateDictCloudAccount();
     } catch (e) {
         dcShowError(typeof e === 'string' ? e : 'Sign-in failed.');
     } finally {
-        buttons.forEach((b) => (b.disabled = false));
+        btn.disabled = false;
     }
 }
+document.getElementById('dcSignIn')?.addEventListener('click', dcSignIn);
+document.getElementById('dcPassword')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') dcSignIn(); });
 
-document.getElementById('dcSignIn')?.addEventListener('click', () => dcAuth('dict_cloud_sign_in'));
-document.getElementById('dcSignUp')?.addEventListener('click', () => dcAuth('dict_cloud_sign_up'));
+// ----- Sign-up bottom sheet -----
+function suShowError(msg) {
+    const el = document.getElementById('suError');
+    el.textContent = msg || '';
+    el.classList.toggle('hidden', !msg);
+}
+function openSignupSheet() {
+    suShowError(null);
+    document.getElementById('suEmail').value = document.getElementById('dcEmail').value.trim();
+    document.getElementById('suPassword').value = '';
+    document.getElementById('signupBackdrop').classList.remove('hidden');
+    setTimeout(() => document.getElementById('suEmail').focus(), 0);
+}
+function closeSignupSheet() {
+    document.getElementById('signupBackdrop').classList.add('hidden');
+}
+document.getElementById('dcShowSignup')?.addEventListener('click', openSignupSheet);
+document.getElementById('suCancel')?.addEventListener('click', closeSignupSheet);
+document.getElementById('signupBackdrop')?.addEventListener('click', (e) => {
+    if (e.target.id === 'signupBackdrop') closeSignupSheet();
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !document.getElementById('signupBackdrop').classList.contains('hidden')) {
+        closeSignupSheet();
+    }
+});
+document.getElementById('suSubmit')?.addEventListener('click', async () => {
+    const email = document.getElementById('suEmail').value.trim();
+    const password = document.getElementById('suPassword').value;
+    if (!email || !email.includes('@')) { suShowError('Enter a valid email address.'); return; }
+    if (!password || password.length < 8) { suShowError('Password must be at least 8 characters.'); return; }
+    suShowError(null);
+    const btn = document.getElementById('suSubmit');
+    btn.disabled = true;
+    try {
+        await invoke('dict_cloud_sign_up', { email, password });
+        // Account created (not signed in) — send the user to the sign-in form.
+        closeSignupSheet();
+        document.getElementById('dcEmail').value = email;
+        document.getElementById('dcPassword').value = '';
+        dcShowError(null);
+        dcShowStatus('Account created. Sign in below.');
+        setTimeout(() => document.getElementById('dcPassword').focus(), 0);
+    } catch (e) {
+        suShowError(typeof e === 'string' ? e : 'Could not create the account.');
+    } finally {
+        btn.disabled = false;
+    }
+});
 
 document.getElementById('dcSignOut')?.addEventListener('click', async () => {
     try {
@@ -1235,6 +1298,19 @@ const COPY_ICON_SVG =
     '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 const CHECK_ICON_SVG =
     '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+const GLOBE_ICON_SVG =
+    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18"/></svg>';
+
+// Small globe badge marking a transcription that was refined through Dict Cloud
+// (i.e. it left the device). Hover shows an explanation.
+function makeCloudBadge() {
+    const span = document.createElement('span');
+    span.className = 'history-cloud';
+    span.innerHTML = GLOBE_ICON_SVG;
+    span.title = 'This message was refined through Dict Cloud';
+    span.setAttribute('aria-label', 'Refined through Dict Cloud');
+    return span;
+}
 
 function makeCopyButton(text) {
     const btn = document.createElement('button');
@@ -1280,9 +1356,11 @@ async function loadHistory() {
 
             const text = entry.cleaned || entry.raw || '';
 
-            // Copy button, pinned to the top-right of the item.
+            // Actions, pinned to the top-right: a cloud badge (if refined via
+            // Dict Cloud) + a copy button.
             const right = document.createElement('div');
             right.className = 'history-actions';
+            if (entry.cloud) right.appendChild(makeCloudBadge());
             right.appendChild(makeCopyButton(text));
             item.appendChild(right);
 

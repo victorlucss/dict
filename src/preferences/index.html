@@ -74,20 +74,14 @@
             <div class="section hidden" id="section-account">
                 <p class="section-desc">Sign in to Dict Cloud to clean up your transcriptions in the cloud. No model, key, or endpoint to set up. Your audio never leaves your Mac. Only the transcribed text is sent.</p>
                 <div class="card">
-                    <!-- Signed-out: email + password -->
+                    <!-- Signed-out: sign-in form (sign-up lives in the bottom sheet) -->
                     <div id="dcSignedOut" class="dc-panel">
-                        <div class="add-row">
-                            <input type="email" id="dcEmail" placeholder="you@example.com" autocomplete="email">
-                        </div>
-                        <div class="add-row">
-                            <input type="password" id="dcPassword" placeholder="Password (8+ characters)" autocomplete="current-password">
-                        </div>
-                        <div class="dc-actions">
-                            <button type="button" class="btn-primary" id="dcSignIn">Sign in</button>
-                            <button type="button" class="btn-secondary" id="dcSignUp">Create account</button>
-                        </div>
+                        <input type="email" id="dcEmail" class="dc-input" placeholder="you@example.com" autocomplete="email">
+                        <input type="password" id="dcPassword" class="dc-input" placeholder="Password" autocomplete="current-password">
                         <div class="dc-status hidden" id="dcStatus"></div>
                         <div class="control-error hidden" id="dcError"></div>
+                        <button type="button" class="btn-primary dc-submit" id="dcSignIn">Sign in</button>
+                        <div class="dc-switch">No account? <button type="button" class="link-btn" id="dcShowSignup">Create one</button></div>
                     </div>
                     <!-- Signed-in -->
                     <div id="dcSignedIn" class="dc-panel hidden">
@@ -96,6 +90,24 @@
                             <button type="button" class="btn-secondary danger" id="dcSignOut">Sign out</button>
                         </div>
                         <div class="dc-access" id="dcAccess"></div>
+                    </div>
+                </div>
+
+                <!-- Usage (shown when signed in with cloud access) -->
+                <div class="card hidden" id="dcUsageCard">
+                    <div class="usage-header">
+                        <span class="usage-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14a2 2 0 0 0 2-2c0-1.1-2-5-2-5s-2 3.9-2 5a2 2 0 0 0 2 2Z"/><path d="M5 19a9 9 0 1 1 14 0"/></svg>
+                        </span>
+                        <span>Usage remaining</span>
+                    </div>
+                    <div class="usage-row">
+                        <span class="usage-label">Today</span>
+                        <span class="usage-value"><strong id="dcUsagePct">—</strong><span class="usage-sub" id="dcUsageSub"></span></span>
+                    </div>
+                    <div class="usage-row">
+                        <span class="usage-label">Plan</span>
+                        <span class="usage-value" id="dcUsagePlan">—</span>
                     </div>
                 </div>
             </div>
@@ -396,6 +408,23 @@
             </div>
         </main>
     </div>
+
+    <!-- Sign-up bottom sheet -->
+    <div class="sheet-backdrop hidden" id="signupBackdrop">
+        <div class="sheet" id="signupSheet" role="dialog" aria-modal="true" aria-label="Create account">
+            <div class="sheet-grip" aria-hidden="true"></div>
+            <h2 class="sheet-title">Create your account</h2>
+            <p class="sheet-desc">Use your email and a password with at least 8 characters. You'll sign in afterward.</p>
+            <input type="email" id="suEmail" class="dc-input" placeholder="you@example.com" autocomplete="email">
+            <input type="password" id="suPassword" class="dc-input" placeholder="Password (8+ characters)" autocomplete="new-password">
+            <div class="control-error hidden" id="suError"></div>
+            <div class="sheet-actions">
+                <button type="button" class="btn-secondary" id="suCancel">Cancel</button>
+                <button type="button" class="btn-primary" id="suSubmit">Create account</button>
+            </div>
+        </div>
+    </div>
+
     <script src="preferences.js"></script>
 </body>
 </html>

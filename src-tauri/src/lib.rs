@@ -408,6 +408,7 @@ async fn dict_cloud_auth(
     email: String,
     password: String,
     fail_msg: &str,
+    store: bool,
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
     let resp = client
@@ -434,30 +435,41 @@ async fn dict_cloud_auth(
         };
         return Err(msg.to_string());
     }
-    let token = data["token"]
-        .as_str()
-        .ok_or("No token in response")?
-        .to_string();
-
-    let state = app.state::<AppState>();
-    let mut s = state.settings.lock().map_err(|e| e.to_string())?;
-    s.data.dict_cloud_token = token;
-    s.data.dict_cloud_email = email.clone();
-    s.save().map_err(|e| e.to_string())?;
+    // Sign-up creates the account but does NOT log in (store = false); the user
+    // then signs in. Sign-in persists the returned session token (store = true).
+    if store {
+        let token = data["token"]
+            .as_str()
+            .ok_or("No token in response")?
+            .to_string();
+        let state = app.state::<AppState>();
+        let mut s = state.settings.lock().map_err(|e| e.to_string())?;
+        s.data.dict_cloud_token = token;
+        s.data.dict_cloud_email = email.clone();
+        s.save().map_err(|e| e.to_string())?;
+    }
     Ok(email)
 }
 
-/// Dict Cloud: create an account with email + password.
+/// Dict Cloud: create an account with email + password (does not sign in).
 #[tauri::command]
 async fn dict_cloud_sign_up(
     app: tauri::AppHandle,
     email: String,
     password: String,
 ) -> Result<String, String> {
-    dict_cloud_auth(&app, "/auth/signup", email, password, "Couldn't create the account.").await
+    dict_cloud_auth(
+        &app,
+        "/auth/signup",
+        email,
+        password,
+        "Couldn't create the account.",
+        false,
+    )
+    .await
 }
 
-/// Dict Cloud: sign in with email + password.
+/// Dict Cloud: sign in with email + password (persists the session token).
 #[tauri::command]
 async fn dict_cloud_sign_in(
     app: tauri::AppHandle,
@@ -470,6 +482,7 @@ async fn dict_cloud_sign_in(
         email,
         password,
         "Wrong email or password.",
+        true,
     )
     .await
 }
@@ -859,9 +872,12 @@ fn handle_transcription(app: &AppHandle, text: &str) {
         if settings_data.privacy_mode {
             tracing::info!("Privacy mode on: not saving transcription to history");
         } else {
+            // The text left the device for refinement when LLM cleanup ran via Dict Cloud.
+            let cloud = settings_data.llm_enabled
+                && matches!(settings_data.llm_provider, settings::LLMProvider::Dictcloud);
             let state = app_handle.state::<AppState>();
             let mut history = state.history.lock().unwrap();
-            history.add(&text_owned, &cleaned, &frontmost, "Whisper");
+            history.add(&text_owned, &cleaned, &frontmost, "Whisper", cloud);
         }
     });
 }
