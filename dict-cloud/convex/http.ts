@@ -128,17 +128,25 @@ http.route({
     if (!text.trim()) return json({ cleaned: "" });
     if (text.length > 8000) return json({ error: "too_long" }, 413);
 
+    // Default to OpenRouter (OpenAI-compatible). Only UPSTREAM_API_KEY is required.
+    const endpoint =
+      process.env.UPSTREAM_ENDPOINT || "https://openrouter.ai/api/v1/chat/completions";
+    const model = process.env.UPSTREAM_MODEL || "openai/gpt-4o-mini";
+
     const system = buildSystemPrompt(body);
     let upstream: Response;
     try {
-      upstream = await fetch(process.env.UPSTREAM_ENDPOINT!, {
+      upstream = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${process.env.UPSTREAM_API_KEY}`,
+          // OpenRouter attribution headers (ignored by other providers).
+          "HTTP-Referer": "https://dict.tianxu.cloud",
+          "X-Title": "Dict",
         },
         body: JSON.stringify({
-          model: process.env.UPSTREAM_MODEL,
+          model,
           messages: [
             { role: "system", content: system },
             { role: "user", content: `[TRANSCRIPTION TO CLEAN]: ${text}` },

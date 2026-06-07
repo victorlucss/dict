@@ -44,9 +44,10 @@ npx convex dev            # logs in, creates a deployment, generates convex/_gen
 
 # Backend env (set in the Convex dashboard → Settings → Environment Variables,
 # or: npx convex env set NAME value):
-#   UPSTREAM_ENDPOINT   OpenAI-compatible chat URL (e.g. https://api.openai.com/v1/chat/completions)
-#   UPSTREAM_MODEL      e.g. gpt-4o-mini
-#   UPSTREAM_API_KEY    your upstream LLM key  (secret)
+#   UPSTREAM_API_KEY    your OpenRouter key  (secret — REQUIRED)
+#   UPSTREAM_ENDPOINT   optional; defaults to https://openrouter.ai/api/v1/chat/completions
+#   UPSTREAM_MODEL      optional; defaults to openai/gpt-4o-mini
+# Any OpenAI-compatible provider works — just override UPSTREAM_ENDPOINT/MODEL.
 ```
 
 `npx convex dev` prints your deployment's **HTTP Actions URL**
