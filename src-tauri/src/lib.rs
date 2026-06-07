@@ -652,7 +652,6 @@ fn build_tray_menu(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         },
     )
     .build(app)?;
-    let record_item = MenuItemBuilder::with_id("toggle_record", "Start Dictation").build(app)?;
     let prefs_item = MenuItemBuilder::with_id("preferences", "Preferences...").build(app)?;
     let update_item =
         MenuItemBuilder::with_id("check_update", "Check for Updates...").build(app)?;
@@ -660,8 +659,6 @@ fn build_tray_menu(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let menu = MenuBuilder::new(app)
         .item(&version_item)
-        .separator()
-        .item(&record_item)
         .separator()
         .item(&toggle_item)
         .item(&ptt_item)
@@ -1222,15 +1219,6 @@ pub fn run() {
             let app_handle = app.handle().clone();
             if let Some(tray) = app.tray_by_id("main-tray") {
                 tray.on_menu_event(move |_app, event| match event.id().as_ref() {
-                    "toggle_record" => {
-                        let state = app_handle.state::<AppState>();
-                        let is_rec = *state.is_recording.lock().unwrap();
-                        if is_rec {
-                            stop_recording(&app_handle);
-                        } else {
-                            start_recording(&app_handle);
-                        }
-                    }
                     "preferences" => open_preferences(&app_handle),
                     "check_update" => updater::check_now(&app_handle),
                     "mode_toggle" => {
