@@ -61,25 +61,28 @@ The app is structured as a Tauri 2.0 application with a Rust backend and HTML/JS
 **lib.rs** is the central orchestrator. It manages state, registers Tauri commands, and wires everything together:
 
 ```
-Global Hotkey (tauri-plugin-global-shortcut, Alt+Space / Ctrl+Alt+Space)
+Global Hotkey (tauri-plugin-global-shortcut; bare modifiers via native NSEvent monitor on macOS)
     → start_recording() / stop_recording()
         → Whisper (audio.rs capture → whisper.rs CLI subprocess)
-            → LLM Processor (llm.rs: OpenAI/Anthropic/Ollama/LM Studio)
+            → LLM Processor (llm.rs: Dict Cloud / OpenAI / Anthropic / OpenRouter / Ollama / LM Studio)
                 → Text Injector (text_injector.rs: arboard clipboard + enigo paste)
 
-System Tray (Tauri tray-icon: mode toggle, preferences, quit)
+System Tray (Tauri tray-icon: mode toggle, preferences, check for updates, quit)
 Recording Overlay (overlay window: animated dots, audio level)
+Copy Fallback (popup with the text when paste isn't possible)
 Settings (settings.rs: serde JSON at ~/.config/dict/config.json)
-Preferences Window (preferences/: sidebar sections, buffered save)
-Update Checker (update_checker.rs: semver comparison against remote)
+Preferences Window (preferences/: sidebar sections, auto-save on change)
+OTA Updater (updater.rs: tauri-plugin-updater, signed latest.json from GitHub releases)
+Dict Cloud (llm.rs → Convex backend: managed cleanup behind a per-user feature flag)
 ```
 
 ### Frontend (src/)
 
 Vanilla HTML/CSS/JS with no build step:
 - `overlay/` — Recording HUD with animated dots and audio level visualization
-- `preferences/` — Settings UI (General, Speech, LLM, Overlay, History, Dictionary, Snippets, Commands, Files) with in-app editors for history/dictionary/snippets/voice-commands
-- `onboarding/` — First-launch setup wizard (platform-aware steps)
+- `preferences/` — Settings UI (Account, General, Speech, LLM, Overlay, History, Dictionary, Snippets, Commands) with in-app editors for history/dictionary/snippets/voice-commands
+- `onboarding/` — First-launch setup wizard (platform-aware; mental-model opener, model download, personalization, try-it)
+- `fallback/` — Copy-fallback popup shown when Dict can't paste into the focused app
 
 ### Key Modules
 
@@ -89,20 +92,24 @@ Vanilla HTML/CSS/JS with no build step:
 | `settings.rs` | SettingsData, persistence, custom dictionary, snippets, voice commands, history |
 | `audio.rs` | cpal microphone capture, rubato resampling to 16kHz, hound WAV writing |
 | `whisper.rs` | whisper-cli binary discovery and subprocess transcription (the sole STT engine) |
-| `llm.rs` | LLM post-processing (4 providers, correction levels 1-5) |
+| `llm.rs` | LLM post-processing (6 providers: Dict Cloud, OpenAI, Anthropic, OpenRouter, Ollama, LM Studio; correction levels 1-5; tone) |
+| `models.rs` | Whisper model catalog + downloader (in-app model manager) |
 | `text_injector.rs` | Clipboard paste via arboard + enigo, key combo simulation |
 | `hotkey.rs` | Hotkey defaults and debounce state |
 | `frontmost_app.rs` | Platform-specific frontmost app detection |
-| `update_checker.rs` | Remote version check with semver comparison |
+| `updater.rs` | OTA self-update via tauri-plugin-updater (launch + every 6h + manual tray check) |
+| `update_checker.rs` | Legacy remote version check (superseded by `updater.rs`) |
 | `logging.rs` | tracing-subscriber with file + stdout |
 
 ### Key Design Decisions
 
 - Tauri 2.0 for cross-platform (macOS, Linux, Windows) with a single Rust codebase — no platform-specific STT, so the build has no Swift/native bridge to compile
 - Whisper (`whisper-cli` + a local GGML model) is the sole STT engine on all platforms
-- Recording has a 15-second hard limit; the backend emits a `recording-warning` event to the overlay at 12s and auto-stops at 15s (guarded by a per-recording generation id)
-- `privacy_mode` skips cloud LLM providers (OpenAI/Anthropic) and suppresses history persistence
-- `tauri-plugin-global-shortcut` for hotkeys (Alt+Space on macOS, Ctrl+Alt+Space elsewhere)
+- Recording has no hard time limit; it runs while the hotkey is held (push-to-talk) or until toggled off
+- `privacy_mode` skips cloud LLM providers (Dict Cloud / OpenAI / Anthropic / OpenRouter) and suppresses history persistence; local providers (Ollama, LM Studio) still run
+- Dict Cloud is managed cleanup via a Convex backend, gated per-user by a `cloud_cleanup` feature flag; the client only shows it as a provider when signed in and the flag is on
+- OTA self-updates via `tauri-plugin-updater` against a signed `latest.json` on GitHub releases (requires a public repo); the release CI rebuilds `latest.json` once across all platforms
+- `tauri-plugin-global-shortcut` for accelerator hotkeys (default Alt+Space on macOS, Ctrl+Alt+Space elsewhere); the hotkey is configurable, and bare modifiers (e.g. Control) are handled by a native NSEvent monitor on macOS. Pressing another key during a bare-modifier recording cancels it (chord like Option+Arrow)
 - Text injection uses `arboard` (clipboard) + `enigo` (key simulation) — cross-platform
 - `macOSPrivateApi: true` in tauri.conf.json + `LSUIElement` for menu-bar-only mode
 - Config at `~/.config/dict/` (macOS/Linux) or `%APPDATA%/dict/` (Windows)
