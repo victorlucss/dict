@@ -223,7 +223,10 @@ h1 {
 }
 
 /* Controls */
-select, input[type="text"], input[type="password"] {
+select,
+input[type="text"],
+input[type="email"],
+input[type="password"] {
     padding: 6px 9px;
     background: rgba(255, 255, 255, 0.07);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -234,13 +237,21 @@ select, input[type="text"], input[type="password"] {
     -webkit-app-region: no-drag;
 }
 
+input::placeholder {
+    color: rgba(235, 235, 245, 0.4);
+}
+
 .setting-control select,
 .setting-control input[type="text"],
+.setting-control input[type="email"],
 .setting-control input[type="password"] {
     min-width: 180px;
 }
 
-select:focus, input[type="text"]:focus, input[type="password"]:focus {
+select:focus,
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus {
     border-color: #4da3ff;
 }
 
@@ -499,6 +510,18 @@ textarea:focus {
 
 .dc-status.hidden {
     display: none;
+}
+
+/* Account (Dict Cloud) panel: even vertical rhythm inside the card. */
+.dc-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 0;
+}
+
+.dc-panel .add-row {
+    margin: 0;
 }
 
 .dc-actions {
