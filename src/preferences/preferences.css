@@ -918,8 +918,9 @@ textarea:focus {
     top: 10px;
     right: 12px;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex-shrink: 0;
 }
 

@@ -1356,12 +1356,12 @@ async function loadHistory() {
 
             const text = entry.cleaned || entry.raw || '';
 
-            // Actions, pinned to the top-right: a cloud badge (if refined via
-            // Dict Cloud) + a copy button.
+            // Actions, pinned to the top-right, stacked: copy button on top, and
+            // the cloud badge below it (when refined via Dict Cloud).
             const right = document.createElement('div');
             right.className = 'history-actions';
-            if (entry.cloud) right.appendChild(makeCloudBadge());
             right.appendChild(makeCopyButton(text));
+            if (entry.cloud) right.appendChild(makeCloudBadge());
             item.appendChild(right);
 
             const cleaned = document.createElement('div');
