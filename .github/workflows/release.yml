@@ -96,7 +96,10 @@ jobs:
           tagName: v${{ needs.check-version.outputs.version }}
           releaseName: Dict v${{ needs.check-version.outputs.version }}
           releaseBody: "Download the installer for your platform below. Existing installs update automatically."
-          releaseDraft: false
+          # Build into a DRAFT release so it never becomes "latest" with a partial
+          # latest.json mid-build. The finalize-manifest job publishes it once the
+          # manifest is complete, so the updater only ever sees finished releases.
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
 
@@ -145,22 +148,27 @@ jobs:
           gh release download "$TAG" --repo "$REPO" --pattern '*.sig' --dir sigs --clobber || true
 
           PLATFORMS='{}'
+          # Add both the plain target key (e.g. darwin-aarch64) and the bundle-
+          # suffixed key the updater prefers (e.g. darwin-aarch64-app), pointing at
+          # the same artifact, so any tauri-plugin-updater version resolves it.
           add_platform() {
-            local name="$1" asset="$2"
+            local name="$1" suffix="$2" asset="$3"
             if [ -n "$asset" ] && [ -f "sigs/$asset.sig" ]; then
-              local sig; sig="$(cat "sigs/$asset.sig")"
-              PLATFORMS="$(echo "$PLATFORMS" | jq --arg n "$name" --arg u "$BASE/$asset" --arg s "$sig" '. + {($n): {signature: $s, url: $u}}')"
-              echo "added $name -> $asset"
+              local sig entry; sig="$(cat "sigs/$asset.sig")"
+              entry="$(jq -n --arg u "$BASE/$asset" --arg s "$sig" '{signature: $s, url: $u}')"
+              PLATFORMS="$(echo "$PLATFORMS" | jq --arg n "$name" --argjson e "$entry" '. + {($n): $e}')"
+              PLATFORMS="$(echo "$PLATFORMS" | jq --arg n "$name-$suffix" --argjson e "$entry" '. + {($n): $e}')"
+              echo "added $name (+ $name-$suffix) -> $asset"
             else
               echo "skipped $name (asset or signature missing: '$asset')"
             fi
           }
 
           # macOS ships a single universal bundle; both arch keys point to it.
-          add_platform "darwin-aarch64" "$MAC"
-          add_platform "darwin-x86_64"  "$MAC"
-          add_platform "linux-x86_64"   "$LINUX"
-          add_platform "windows-x86_64" "$WIN"
+          add_platform "darwin-aarch64" "app"      "$MAC"
+          add_platform "darwin-x86_64"  "app"      "$MAC"
+          add_platform "linux-x86_64"   "appimage" "$LINUX"
+          add_platform "windows-x86_64" "nsis"     "$WIN"
 
           jq -n \
             --arg version "$VERSION" \
@@ -173,3 +181,7 @@ jobs:
           cat latest.json
 
           gh release upload "$TAG" latest.json --repo "$REPO" --clobber
+
+          # Manifest is complete — now publish the draft and mark it latest, so the
+          # updater flips to this version only once every platform is present.
+          gh release edit "$TAG" --repo "$REPO" --draft=false --latest
