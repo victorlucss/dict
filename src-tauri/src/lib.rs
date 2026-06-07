@@ -427,7 +427,7 @@ async fn dict_cloud_auth(
         // Surface a couple of specific cases; otherwise the generic message.
         let err = data["error"].as_str().unwrap_or("");
         let msg = match err {
-            "email_taken" => "That email already has an account — sign in instead.",
+            "email_taken" => "That email already has an account. Sign in instead.",
             "weak_password" => "Password must be at least 8 characters.",
             "bad_email" => "Enter a valid email address.",
             _ => fail_msg,

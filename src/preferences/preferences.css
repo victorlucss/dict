@@ -87,7 +87,7 @@ body {
 }
 
 .sidebar-btn.active {
-    background: rgba(77, 163, 255, 0.16);
+    background: rgba(255, 255, 255, 0.12);
     color: #ffffff;
 }
 
@@ -102,7 +102,7 @@ body {
 }
 
 .sidebar-btn.active .icon {
-    color: #6db8ff;
+    color: #ffffff;
 }
 
 .sidebar-btn .icon svg {
@@ -227,13 +227,14 @@ select,
 input[type="text"],
 input[type="email"],
 input[type="password"] {
-    padding: 6px 9px;
-    background: rgba(255, 255, 255, 0.07);
+    padding: 7px 11px;
+    background: #2a2a2c;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    color: #e6e6e6;
+    border-radius: 8px;
+    color: #f2f2f4;
     font-size: 13px;
     outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
     -webkit-app-region: no-drag;
 }
 
@@ -253,24 +254,27 @@ input[type="text"]:focus,
 input[type="email"]:focus,
 input[type="password"]:focus {
     border-color: #4da3ff;
+    box-shadow: 0 0 0 3px rgba(77, 163, 255, 0.18);
 }
 
 textarea {
     width: 100%;
-    padding: 8px;
-    background: rgba(255, 255, 255, 0.07);
+    padding: 9px 11px;
+    background: #2a2a2c;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    color: #e6e6e6;
+    border-radius: 8px;
+    color: #f2f2f4;
     font-size: 12px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     resize: vertical;
     outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
     -webkit-app-region: no-drag;
 }
 
 textarea:focus {
     border-color: #4da3ff;
+    box-shadow: 0 0 0 3px rgba(77, 163, 255, 0.18);
 }
 
 /* Toggle switch */
@@ -512,12 +516,17 @@ textarea:focus {
     display: none;
 }
 
+/* Account (Dict Cloud): keep the sign-in form a sensible width, not full-pane. */
+#section-account .card {
+    max-width: 460px;
+}
+
 /* Account (Dict Cloud) panel: even vertical rhythm inside the card. */
 .dc-panel {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 16px 0;
+    gap: 8px;
+    padding: 14px 0;
 }
 
 .dc-panel .add-row {

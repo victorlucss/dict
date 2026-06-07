@@ -23,7 +23,7 @@ const STEP = {
         id: 'welcome',
         icon: ICONS.mic,
         title: 'Welcome to Dict',
-        description: 'Talk, and Dict types it out — in any app. Hold <kbd>Option</kbd> + <kbd>Space</kbd> anywhere to start dictating.',
+        description: 'Talk and Dict types it out, in any app. Hold <kbd>Option</kbd> + <kbd>Space</kbd> anywhere to start dictating.',
         action: 'Get Started'
     },
     accessibility: {
@@ -37,7 +37,7 @@ const STEP = {
         id: 'model',
         icon: ICONS.download,
         title: 'Pick a voice model',
-        description: 'Dict transcribes right on your Mac with Whisper. Choose a model to download — you can switch anytime in Preferences.',
+        description: 'Dict transcribes right on your Mac with Whisper. Pick a model to download. You can switch anytime in Preferences.',
         action: 'Continue'
     },
     tryit: {
@@ -94,7 +94,7 @@ async function init() {
     } else {
         steps = [STEP.welcome, STEP.model, STEP.tryit];
         // Swap shortcut copy for non-macOS.
-        STEP.welcome.description = `Talk, and Dict types it out — in any app. Hold ${OTHER_SHORTCUT} anywhere to start dictating.`;
+        STEP.welcome.description = `Talk and Dict types it out, in any app. Hold ${OTHER_SHORTCUT} anywhere to start dictating.`;
         STEP.tryit.description = `Hold ${OTHER_SHORTCUT}, say a sentence, then let go. Your words show up below.`;
     }
 
@@ -217,7 +217,7 @@ async function setupModelStep() {
             models = await invoke('list_whisper_models');
             modelsLoaded = true;
         } catch (e) {
-            modelList.innerHTML = `<div class="dl-status">Couldn't load the models — check your connection and try again.</div>`;
+            modelList.innerHTML = `<div class="dl-status">Couldn't load the models. Check your connection and try again.</div>`;
             return;
         }
     }
@@ -330,7 +330,7 @@ async function downloadSelected() {
         updateModelGate();
         return true;
     } catch (err) {
-        status.textContent = "Download didn't finish — give it another try.";
+        status.textContent = "Download didn't finish. Give it another try.";
         bar.classList.remove('indeterminate');
         fill.style.width = '0%';
         downloading = false;

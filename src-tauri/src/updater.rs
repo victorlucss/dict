@@ -59,7 +59,7 @@ async fn check(app: AppHandle, user_initiated: bool) {
             let install = app
                 .dialog()
                 .message(format!(
-                    "Dict {version} is available — you have {current}.\n\nInstall it now? Dict will restart to finish."
+                    "Dict {version} is available (you have {current}).\n\nInstall it now? Dict will restart to finish."
                 ))
                 .title("Update available")
                 .buttons(MessageDialogButtons::OkCancelCustom(

@@ -52,7 +52,7 @@
       "open": true
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUyMTlEREQzMEI4NjAzOUIKUldTYkE0WUwwOTBaNGtIMnNtRElnWU5tT3JJZzFqZHZvYTdDcDlMMGFLY1Q3V01DNXlJY3pxUWgK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc0NDAzQTcxMDg0RUIxQjMKUldTenNVNEljVHBBZEhFOXNsU0hHRmllWDMrdVBqa1BuOWdoQ3pZdHhERmlNQ1Y5QnhYa3JCRUUK",
       "endpoints": [
         "https://github.com/victorlucss/dict/releases/latest/download/latest.json"
       ],

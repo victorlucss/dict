@@ -25,7 +25,7 @@ function restartCountdown() {
 function render(text) {
     currentText = text || '';
     textEl.textContent = currentText;
-    headerEl.textContent = "Couldn't paste — click to copy";
+    headerEl.textContent = "Couldn't paste. Click to copy";
     timerIcon.innerHTML = COPY_SVG;
     popup.classList.remove('copied');
     restartCountdown();

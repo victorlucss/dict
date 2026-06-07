@@ -72,7 +72,7 @@
 
             <!-- Account Section (Dict Cloud sign-in) -->
             <div class="section hidden" id="section-account">
-                <p class="section-desc">Sign in to Dict Cloud to clean up transcriptions on our servers — no model, key, or endpoint to set up. Your audio never leaves your Mac; only the transcribed text is sent.</p>
+                <p class="section-desc">Sign in to Dict Cloud to clean up your transcriptions in the cloud. No model, key, or endpoint to set up. Your audio never leaves your Mac. Only the transcribed text is sent.</p>
                 <div class="card">
                     <!-- Signed-out: email + password -->
                     <div id="dcSignedOut" class="dc-panel">
@@ -144,7 +144,7 @@
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Flow Mode</div>
-                            <div class="setting-desc">Press Return for you after pasting — handy for firing off chat messages hands-free.</div>
+                            <div class="setting-desc">Presses Return for you after pasting, so chat messages send themselves.</div>
                         </div>
                         <div class="setting-control">
                             <input type="checkbox" id="flowMode" class="toggle">
@@ -162,7 +162,7 @@
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Privacy Mode</div>
-                            <div class="setting-desc">Keeps everything on your Mac — nothing goes to cloud LLMs, and your history isn't saved.</div>
+                            <div class="setting-desc">Keeps everything on your Mac. Nothing goes to cloud LLMs, and your history isn't saved.</div>
                         </div>
                         <div class="setting-control">
                             <input type="checkbox" id="privacyMode" class="toggle">
@@ -221,7 +221,7 @@
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Clean up with an LLM</div>
-                            <div class="setting-desc">Polish each transcription with an LLM — tidying grammar and punctuation and trimming filler like "um" and "you know".</div>
+                            <div class="setting-desc">Run each transcription through an LLM to fix grammar and punctuation and cut filler like "um" and "you know".</div>
                         </div>
                         <div class="setting-control">
                             <input type="checkbox" id="llmEnabled" class="toggle">
@@ -230,7 +230,7 @@
                     <div class="setting-row setting-row-stacked">
                         <div class="setting-info">
                             <div class="setting-title">Correction level</div>
-                            <div class="setting-desc">How much the LLM reshapes your words — from a light touch-up to a full rewrite.</div>
+                            <div class="setting-desc">How much the LLM changes your words, from a light touch-up to a full rewrite.</div>
                         </div>
                         <div class="setting-control setting-control-full">
                             <input type="hidden" id="llmAccuracy" value="3">
@@ -265,19 +265,19 @@
                         </div>
                         <div class="setting-control">
                             <select id="llmProvider">
-                                <option value="dictcloud" data-desc="Managed — no setup, no API key">Dict Cloud</option>
-                                <option value="openai" data-desc="Cloud — GPT models from OpenAI">OpenAI</option>
-                                <option value="anthropic" data-desc="Cloud — Claude models from Anthropic">Anthropic</option>
-                                <option value="openrouter" data-desc="Cloud — lots of models in one place">OpenRouter</option>
-                                <option value="ollama" data-desc="Local — runs right on your Mac">Ollama (local)</option>
-                                <option value="lmstudio" data-desc="Local — runs right on your Mac">LM Studio (local)</option>
+                                <option value="dictcloud" data-desc="Managed. No setup or API key">Dict Cloud</option>
+                                <option value="openai" data-desc="Cloud. GPT models from OpenAI">OpenAI</option>
+                                <option value="anthropic" data-desc="Cloud. Claude models from Anthropic">Anthropic</option>
+                                <option value="openrouter" data-desc="Cloud. Lots of models in one place">OpenRouter</option>
+                                <option value="ollama" data-desc="Local. Runs on your Mac">Ollama (local)</option>
+                                <option value="lmstudio" data-desc="Local. Runs on your Mac">LM Studio (local)</option>
                             </select>
                         </div>
                     </div>
                     <div class="setting-row" id="dictCloudNote">
                         <div class="setting-info">
                             <div class="setting-title">No setup needed</div>
-                            <div class="setting-desc">Dict Cloud cleans up transcriptions on our servers — no model, key, or endpoint to configure. Manage your sign-in under the <strong>Account</strong> tab.</div>
+                            <div class="setting-desc">Dict Cloud cleans up your transcriptions in the cloud. No model, key, or endpoint to configure. Manage your sign-in under the <strong>Account</strong> tab.</div>
                         </div>
                     </div>
                     <div class="setting-row" id="modelRow">
@@ -292,7 +292,7 @@
                     <div class="setting-row" id="endpointRow">
                         <div class="setting-info">
                             <div class="setting-title">Endpoint</div>
-                            <div class="setting-desc">Where requests are sent. Filled in automatically for your provider — only change it if you know you need to.</div>
+                            <div class="setting-desc">Where requests are sent. Filled in automatically for your provider. Only change it if you need to.</div>
                         </div>
                         <div class="setting-control">
                             <input type="text" id="llmEndpoint" placeholder="http://localhost:11434/v1/chat/completions" disabled>
@@ -310,7 +310,7 @@
                     <div class="setting-row setting-row-stacked">
                         <div class="setting-info">
                             <div class="setting-title">Tone</div>
-                            <div class="setting-desc">How polished the final text reads — pick the vibe that fits you.</div>
+                            <div class="setting-desc">How polished the final text reads. Pick what fits you.</div>
                         </div>
                         <div class="setting-control setting-control-full">
                             <input type="hidden" id="llmTone" value="formal">
@@ -359,7 +359,7 @@
 
             <!-- Dictionary Section -->
             <div class="section hidden" id="section-dictionary">
-                <p class="section-desc">Teach Dict the words it tends to miss — names, jargon, acronyms — so it spells them right every time.</p>
+                <p class="section-desc">Add words Dict tends to miss, like names, jargon, and acronyms, so it spells them right.</p>
                 <div class="card">
                     <div class="add-row">
                         <input type="text" id="dictionaryInput" placeholder="Add a word…">
@@ -371,7 +371,7 @@
 
             <!-- Snippets Section -->
             <div class="section hidden" id="section-snippets">
-                <p class="section-desc">Say a short trigger and Dict expands it into the full text — signatures, addresses, boilerplate.</p>
+                <p class="section-desc">Say a short trigger and Dict types out the full text, like a signature or address.</p>
                 <div class="card">
                     <div class="add-row">
                         <input type="text" id="snippetTriggerInput" placeholder="Trigger">
@@ -384,7 +384,7 @@
 
             <!-- Voice Commands Section -->
             <div class="section hidden" id="section-commands">
-                <p class="section-desc">Say a phrase to fire a keyboard shortcut — like "save it" to press <code>cmd+s</code>.</p>
+                <p class="section-desc">Say a phrase to fire a keyboard shortcut, like "save it" to press <code>cmd+s</code>.</p>
                 <div class="card">
                     <div class="add-row">
                         <input type="text" id="commandTriggerInput" placeholder="Trigger phrase">

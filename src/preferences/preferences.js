@@ -425,7 +425,7 @@ async function updateDictCloudAccount() {
             accessEl.innerHTML = `✓ Cloud cleanup enabled · <strong>${planLabel}</strong> plan · ${usageStr}`;
             accessEl.classList.add('enabled');
         } else {
-            accessEl.textContent = "Dict Cloud cleanup isn't enabled for your account yet — you're on the list, we'll turn it on soon.";
+            accessEl.textContent = "Dict Cloud cleanup isn't enabled for your account yet. You're on the list, we'll turn it on soon.";
         }
     } catch (e) {
         accessEl.textContent = "Couldn't check access right now.";
@@ -601,7 +601,7 @@ function startHotkeyRecording() {
     recordingHotkey = true;
     recordingSawKey = false;
     recordingLastMod = null;
-    showHotkeyError('Press a key combo — or tap a single ⌃/⌥/⌘ for a one-key trigger. Esc to cancel.');
+    showHotkeyError('Press a key combo, or tap a single ⌃/⌥/⌘ for a one-key trigger. Esc to cancel.');
     const btn = document.getElementById('hotkeyRecorder');
     btn.classList.add('recording');
     document.getElementById('hotkeyDisplay').textContent = 'Press shortcut…';
@@ -740,7 +740,7 @@ async function autoSave() {
         currentSettings = data;
     } catch (e) {
         console.error('Failed to save settings:', e);
-        showHotkeyError("Couldn't save — " + (typeof e === 'string' ? e : (e?.message || 'those settings look invalid.')));
+        showHotkeyError("Couldn't save. " + (typeof e === 'string' ? e : (e?.message || 'those settings look invalid.')));
     }
 }
 
@@ -1162,7 +1162,7 @@ async function downloadSelectedWhisperModel() {
     } catch (e) {
         console.error('Failed to download Whisper model:', e);
         downloadingModel = null;
-        showWhisperError("Download didn't finish — " + (typeof e === 'string' ? e : (e?.message || 'something went wrong. Try again.')));
+        showWhisperError("Download didn't finish. " + (typeof e === 'string' ? e : (e?.message || 'something went wrong. Try again.')));
         resetWhisperDownloadButton();
         updateWhisperModelUI();
     }
@@ -1192,7 +1192,7 @@ async function deleteSelectedWhisperModel() {
         autoSave();
     } catch (e) {
         console.error('Failed to delete Whisper model:', e);
-        showWhisperError("Couldn't delete that model — " + (typeof e === 'string' ? e : (e?.message || 'something went wrong. Try again.')));
+        showWhisperError("Couldn't delete that model. " + (typeof e === 'string' ? e : (e?.message || 'something went wrong. Try again.')));
         delBtn.disabled = false;
         updateWhisperModelUI();
     }
