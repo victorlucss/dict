@@ -99,3 +99,74 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  # Each matrix job above runs tauri-action, which generates its own latest.json
+  # containing ONLY that job's platform — so the three jobs clobber each other and
+  # whichever finishes last wins, leaving a manifest missing the other platforms.
+  # This final job runs once after all builds, rebuilds latest.json from every
+  # platform's signature, and uploads it with --clobber so OTA sees all platforms.
+  finalize-manifest:
+    needs: [check-version, release]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rebuild latest.json from all platform signatures
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ needs.check-version.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v$VERSION"
+          BASE="https://github.com/$REPO/releases/download/$TAG"
+          PUBDATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          # All asset names on the release (excludes nothing; we match by suffix).
+          mapfile -t ASSETS < <(gh release view "$TAG" --repo "$REPO" --json assets -q '.assets[].name')
+
+          # Find the updater bundle for a platform by suffix (.sig files never match
+          # these because their suffix is .sig, not the bundle extension).
+          find_asset() {
+            local suffix="$1" a
+            for a in "${ASSETS[@]}"; do
+              case "$a" in *"$suffix") echo "$a"; return 0 ;; esac
+            done
+            return 0
+          }
+
+          MAC="$(find_asset '.app.tar.gz')"
+          LINUX="$(find_asset '.AppImage')"
+          WIN="$(find_asset '.nsis.zip')"
+
+          # Pull every signature file so we can inline them into the manifest.
+          gh release download "$TAG" --repo "$REPO" --pattern '*.sig' --dir sigs --clobber || true
+
+          PLATFORMS='{}'
+          add_platform() {
+            local name="$1" asset="$2"
+            if [ -n "$asset" ] && [ -f "sigs/$asset.sig" ]; then
+              local sig; sig="$(cat "sigs/$asset.sig")"
+              PLATFORMS="$(echo "$PLATFORMS" | jq --arg n "$name" --arg u "$BASE/$asset" --arg s "$sig" '. + {($n): {signature: $s, url: $u}}')"
+              echo "added $name -> $asset"
+            else
+              echo "skipped $name (asset or signature missing: '$asset')"
+            fi
+          }
+
+          # macOS ships a single universal bundle; both arch keys point to it.
+          add_platform "darwin-aarch64" "$MAC"
+          add_platform "darwin-x86_64"  "$MAC"
+          add_platform "linux-x86_64"   "$LINUX"
+          add_platform "windows-x86_64" "$WIN"
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pubdate "$PUBDATE" \
+            --argjson platforms "$PLATFORMS" \
+            '{version: $version, notes: "See the release page for details.", pub_date: $pubdate, platforms: $platforms}' \
+            > latest.json
+
+          echo "--- latest.json ---"
+          cat latest.json
+
+          gh release upload "$TAG" latest.json --repo "$REPO" --clobber
