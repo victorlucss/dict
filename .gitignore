@@ -15,3 +15,5 @@ src-tauri/swift-bridge/lib/
 
 src-tauri/icons/android/
 src-tauri/icons/ios/
+
+.playwright-mcp/

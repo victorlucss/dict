@@ -362,6 +362,18 @@ document.querySelectorAll('.sidebar-btn').forEach(btn => {
     });
 });
 
+// Keep the Usage figures fresh: re-fetch whenever the window regains focus or
+// becomes visible while the Account section is open, so usage reflects dictations
+// made in other apps without needing to leave and reopen the section.
+function refreshAccountIfVisible() {
+    const acct = document.getElementById('section-account');
+    if (acct && !acct.classList.contains('hidden')) updateDictCloudAccount();
+}
+window.addEventListener('focus', refreshAccountIfVisible);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshAccountIfVisible();
+});
+
 // ----- Correction level cards --------------------------------------------
 // Five selectable cards (1–5) mapped to the `llmAccuracy` setting, mirroring the
 // tone cards. The chosen level is mirrored into the hidden #llmAccuracy input
@@ -396,6 +408,46 @@ function dcShowStatus(msg) {
     el.classList.toggle('hidden', !msg);
 }
 
+// Set when we fall the provider back off Dict Cloud, so init can persist the
+// correction once all fields are loaded (autoSave is gated until then).
+let providerCorrectionPending = false;
+
+// Dict Cloud is only a valid provider when the user is signed in AND has the
+// cloud_cleanup flag. Show the option only then; otherwise remove it, and if it
+// was the selected provider, fall back to the local default so the backend never
+// tries an unavailable Dict Cloud.
+function setDictCloudProviderAvailable(available) {
+    const sel = document.getElementById('llmProvider');
+    if (!sel) return;
+    const existing = Array.from(sel.options).find(o => o.value === 'dictcloud');
+
+    if (available) {
+        if (!existing) {
+            const opt = document.createElement('option');
+            opt.value = 'dictcloud';
+            opt.setAttribute('data-desc', 'Managed. No setup or API key');
+            opt.textContent = 'Dict Cloud';
+            sel.insertBefore(opt, sel.firstChild);
+            sel._customSelect?.rebuild();
+        }
+        return;
+    }
+
+    if (!existing) return;
+    const wasSelected = sel.value === 'dictcloud';
+    existing.remove();
+    sel._customSelect?.rebuild();
+    if (wasSelected) {
+        sel.value = 'ollama';
+        sel._customSelect?.rebuild();
+        updateProviderFields();
+        // autoSave is a no-op until settingsReady; persist now if ready, else
+        // flag it so init persists once every field has loaded.
+        if (settingsReady) autoSave();
+        else providerCorrectionPending = true;
+    }
+}
+
 // Reflect signed-in vs signed-out state from currentSettings, and (when signed
 // in) show cloud access + a Usage section (today's usage against the plan limit).
 async function updateDictCloudAccount() {
@@ -406,6 +458,7 @@ async function updateDictCloudAccount() {
     const usageCard = document.getElementById('dcUsageCard');
     usageCard.classList.add('hidden');
     if (!signedIn) {
+        setDictCloudProviderAvailable(false);
         dcShowStatus(null);
         dcShowError(null);
         return;
@@ -418,6 +471,7 @@ async function updateDictCloudAccount() {
     try {
         const status = await invoke('dict_cloud_flags');
         const enabled = !!(status && status.flags && status.flags.cloud_cleanup);
+        setDictCloudProviderAvailable(enabled);
         const plan = (status && status.plan) || 'free';
         const used = (status && status.usedToday) || 0;
         const limit = status ? status.dailyLimit : null; // null = unlimited
@@ -428,13 +482,19 @@ async function updateDictCloudAccount() {
             // Populate the Usage section.
             const pctEl = document.getElementById('dcUsagePct');
             const subEl = document.getElementById('dcUsageSub');
+            const barEl = document.getElementById('dcUsageBar');
+            const fillEl = document.getElementById('dcUsageBarFill');
             if (limit === null) {
                 pctEl.textContent = 'Unlimited';
                 subEl.textContent = `${used} today`;
+                barEl.style.display = 'none';
             } else {
                 const remaining = Math.max(0, Math.round(((limit - used) / limit) * 100));
                 pctEl.textContent = `${remaining}%`;
                 subEl.textContent = `${used} of ${limit} used`;
+                barEl.style.display = '';
+                fillEl.style.width = `${remaining}%`;
+                fillEl.classList.toggle('low', remaining <= 15);
             }
             document.getElementById('dcUsagePlan').textContent = planLabel;
             usageCard.classList.remove('hidden');
@@ -442,6 +502,8 @@ async function updateDictCloudAccount() {
             accessEl.textContent = "Dict Cloud cleanup isn't enabled for your account yet. You're on the list, we'll turn it on soon.";
         }
     } catch (e) {
+        // Can't confirm the flag, so don't offer Dict Cloud as a provider.
+        setDictCloudProviderAvailable(false);
         accessEl.textContent = "Couldn't check access right now.";
     }
 }
@@ -845,6 +907,12 @@ async function init() {
     // All controls now reflect saved state; arm auto-save for real user edits.
     wireAutoSave();
     settingsReady = true;
+    // If Dict Cloud was selected but isn't available, the provider was switched
+    // to the local default during load; persist that now that all fields exist.
+    if (providerCorrectionPending) {
+        providerCorrectionPending = false;
+        autoSave();
+    }
 }
 
 function loadValues(s) {
