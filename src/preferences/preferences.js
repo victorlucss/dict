@@ -414,9 +414,15 @@ async function updateDictCloudAccount() {
     accessEl.className = 'dc-access';
     accessEl.textContent = 'Checking access…';
     try {
-        const flags = await invoke('dict_cloud_flags');
-        if (flags && flags.cloud_cleanup) {
-            accessEl.textContent = '✓ Dict Cloud cleanup is enabled for your account.';
+        const status = await invoke('dict_cloud_flags');
+        const enabled = !!(status && status.flags && status.flags.cloud_cleanup);
+        const plan = (status && status.plan) || 'free';
+        const used = (status && status.usedToday) || 0;
+        const limit = status ? status.dailyLimit : null; // null = unlimited
+        const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+        if (enabled) {
+            const usageStr = limit === null ? 'unlimited today' : `${used}/${limit} today`;
+            accessEl.innerHTML = `✓ Cloud cleanup enabled · <strong>${planLabel}</strong> plan · ${usageStr}`;
             accessEl.classList.add('enabled');
         } else {
             accessEl.textContent = "Dict Cloud cleanup isn't enabled for your account yet — you're on the list, we'll turn it on soon.";

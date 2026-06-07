@@ -65,6 +65,28 @@ npx convex run admin:setUserFlag '{"email":"you@example.com","key":"realtime_str
 
 The client fetches `/v1/flags` and enables matching experimental features.
 
+## Plans & limits
+
+Access is two-layered for cost control:
+1. **Feature flag `cloud_cleanup`** (off by default) — gates *whether* an account
+   can use cloud cleanup at all. `/v1/clean` returns `403 not_enabled` without it.
+2. **Plan** — sets the *daily limit* for accounts that have access. `dailyLimit`
+   `null` = unlimited. Every user defaults to **free**; assign others **unlimited**.
+
+```bash
+# plans are seeded; redefine if needed:
+npx convex run admin:definePlan '{"key":"free","name":"Free","dailyLimit":100}'
+npx convex run admin:definePlan '{"key":"unlimited","name":"Unlimited","dailyLimit":null}'
+
+# grant a user access + an unlimited plan:
+npx convex run admin:setUserFlag '{"email":"you@example.com","key":"cloud_cleanup","enabled":true}'
+npx convex run admin:setUserPlan '{"email":"you@example.com","plan":"unlimited"}'
+```
+
+`GET /v1/flags` returns `{ flags, plan, dailyLimit, usedToday }`; over-limit
+`/v1/clean` returns `429 quota_exceeded`. (Pricing/billing is future work — the
+plan logic is in place to wire it to later.)
+
 ## Notes
 
 - **Privacy:** transcripts aren't logged or stored — processed in memory, dropped.

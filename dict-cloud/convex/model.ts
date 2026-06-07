@@ -1,7 +1,19 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
-const FREE_DAILY_LIMIT = 100; // cleanups/day per user on the free tier
+const DEFAULT_FREE_LIMIT = 100; // fallback if the "free" plan row is missing
+
+// Resolve a user's plan key + daily limit (null = unlimited).
+async function resolvePlan(ctx: any, userId: any): Promise<{ plan: string; limit: number | null }> {
+  const user = await ctx.db.get(userId);
+  const planKey = user?.plan ?? "free";
+  const row = await ctx.db
+    .query("plans")
+    .withIndex("by_key", (q: any) => q.eq("key", planKey))
+    .first();
+  const limit = row ? row.dailyLimit : planKey === "unlimited" ? null : DEFAULT_FREE_LIMIT;
+  return { plan: planKey, limit };
+}
 
 // Create a new account (hash computed in the action). Fails if email is taken.
 export const createUser = internalMutation({
@@ -94,20 +106,49 @@ export const flagsForUser = internalQuery({
   },
 });
 
-// Per-user daily rate limit. Returns whether this request is allowed (and counts it).
+// Per-user daily limit driven by the user's plan. Counts the request if allowed.
+// Unlimited plans (limit === null) are always allowed (and still counted).
 export const checkAndBumpUsage = internalMutation({
   args: { userId: v.id("users"), day: v.string() },
-  returns: v.object({ allowed: v.boolean() }),
+  returns: v.object({
+    allowed: v.boolean(),
+    used: v.number(),
+    limit: v.union(v.number(), v.null()),
+    plan: v.string(),
+  }),
   handler: async (ctx, { userId, day }) => {
+    const { plan, limit } = await resolvePlan(ctx, userId);
     const bucket = `${userId}:${day}`;
     const rec = await ctx.db
       .query("usage")
       .withIndex("by_bucket", (q) => q.eq("bucket", bucket))
       .first();
-    const count = rec?.count ?? 0;
-    if (count >= FREE_DAILY_LIMIT) return { allowed: false };
-    if (rec) await ctx.db.patch(rec._id, { count: count + 1 });
+    const used = rec?.count ?? 0;
+    if (limit !== null && used >= limit) {
+      return { allowed: false, used, limit, plan };
+    }
+    if (rec) await ctx.db.patch(rec._id, { count: used + 1 });
     else await ctx.db.insert("usage", { bucket, count: 1 });
-    return { allowed: true };
+    return { allowed: true, used: used + 1, limit, plan };
+  },
+});
+
+// Read-only account status: plan, daily limit, usage today, and feature flags.
+export const accountStatus = internalQuery({
+  args: { userId: v.id("users"), day: v.string() },
+  handler: async (ctx, { userId, day }) => {
+    const { plan, limit } = await resolvePlan(ctx, userId);
+    const bucket = `${userId}:${day}`;
+    const rec = await ctx.db
+      .query("usage")
+      .withIndex("by_bucket", (q) => q.eq("bucket", bucket))
+      .first();
+    const user = await ctx.db.get(userId);
+    const overrides = user?.flags ?? {};
+    const catalog = await ctx.db.query("featureFlags").collect();
+    const flags: Record<string, boolean> = {};
+    for (const f of catalog) flags[f.key] = overrides[f.key] ?? f.enabledByDefault;
+    for (const [k, val] of Object.entries(overrides)) if (!(k in flags)) flags[k] = val;
+    return { plan, dailyLimit: limit, usedToday: rec?.count ?? 0, flags };
   },
 });

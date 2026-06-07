@@ -474,7 +474,8 @@ async fn dict_cloud_sign_in(
     .await
 }
 
-/// Dict Cloud: fetch the signed-in account's feature flags (e.g. cloud_cleanup).
+/// Dict Cloud: fetch the signed-in account's status — feature flags, plan,
+/// daily limit, and usage today. Returns the raw `/v1/flags` JSON.
 #[tauri::command]
 async fn dict_cloud_flags(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let token = {
@@ -500,7 +501,7 @@ async fn dict_cloud_flags(app: tauri::AppHandle) -> Result<serde_json::Value, St
         .json()
         .await
         .map_err(|e| format!("Unexpected response: {}", e))?;
-    Ok(data.get("flags").cloned().unwrap_or(serde_json::json!({})))
+    Ok(data)
 }
 
 /// Dict Cloud: sign out (clear the stored token + email).

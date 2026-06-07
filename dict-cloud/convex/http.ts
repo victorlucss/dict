@@ -122,11 +122,16 @@ http.route({
     if (!flags["cloud_cleanup"]) return json({ error: "not_enabled" }, 403);
 
     const day = new Date().toISOString().slice(0, 10);
-    const { allowed } = await ctx.runMutation(internal.model.checkAndBumpUsage, {
+    const usage = await ctx.runMutation(internal.model.checkAndBumpUsage, {
       userId: user._id,
       day,
     });
-    if (!allowed) return json({ error: "quota_exceeded", resetAt: `${day}T23:59:59Z` }, 429);
+    if (!usage.allowed) {
+      return json(
+        { error: "quota_exceeded", plan: usage.plan, limit: usage.limit, resetAt: `${day}T23:59:59Z` },
+        429,
+      );
+    }
 
     const body = await req.json().catch(() => ({}));
     const text = (body.text || "").toString();
@@ -170,15 +175,16 @@ http.route({
   }),
 });
 
-// GET /v1/flags -> { flags: { key: bool, ... } }
+// GET /v1/flags -> { flags, plan, dailyLimit, usedToday }
 http.route({
   path: "/v1/flags",
   method: "GET",
   handler: httpAction(async (ctx, req) => {
     const user = await authUser(ctx, req);
     if (!user) return json({ error: "unauthorized" }, 401);
-    const flags = await ctx.runQuery(internal.model.flagsForUser, { userId: user._id });
-    return json({ flags });
+    const day = new Date().toISOString().slice(0, 10);
+    const status = await ctx.runQuery(internal.model.accountStatus, { userId: user._id, day });
+    return json(status);
   }),
 });
 
