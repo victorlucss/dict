@@ -14,12 +14,41 @@ const COPY_SVG = timerIcon.innerHTML;
 
 let currentText = '';
 
-// Restart the CSS countdown animation from the top.
+const COUNTDOWN_MS = 5000;
+let hideTimer = null;
+let remainingMs = COUNTDOWN_MS;
+let countdownStart = 0;
+
+function clearHideTimer() {
+    if (hideTimer !== null) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+    }
+}
+
+function hidePopup() {
+    clearHideTimer();
+    // HIDE (not close) so the WKWebView is reused — closing it leaks the webview
+    // in wry.
+    getCurrentWindow().hide().catch(() => {});
+}
+
+function scheduleHide(ms) {
+    clearHideTimer();
+    countdownStart = Date.now();
+    remainingMs = ms;
+    hideTimer = setTimeout(hidePopup, ms);
+}
+
+// Restart the visual ring AND the (authoritative) JS hide timer. The close is
+// driven by the timer rather than the CSS 'animationend' event: the popup window
+// is now reused (hidden, not destroyed), and the CSS animation does not reliably
+// restart across hide/show, which left the popup stuck open.
 function restartCountdown() {
     ringFill.classList.remove('run');
-    // Force reflow so removing + re-adding the class re-triggers the animation.
-    void ringFill.offsetWidth;
+    void ringFill.offsetWidth; // reflow so the visual ring restarts
     ringFill.classList.add('run');
+    scheduleHide(COUNTDOWN_MS);
 }
 
 function render(text) {
@@ -31,11 +60,18 @@ function render(text) {
     restartCountdown();
 }
 
-// The popup hides once the ring fully depletes. Hovering pauses the animation
-// (CSS), so this won't fire while the user is reading/hovering. We HIDE rather
-// than close so the WKWebView is reused (closing it leaks the webview in wry).
-ringFill.addEventListener('animationend', () => {
-    getCurrentWindow().hide().catch(() => {});
+// Pause the countdown while the cursor is over the popup (mirrors the CSS pause),
+// and resume with the time remaining once it leaves.
+popup.addEventListener('mouseenter', () => {
+    if (hideTimer !== null) {
+        remainingMs = Math.max(0, remainingMs - (Date.now() - countdownStart));
+        clearHideTimer();
+    }
+});
+popup.addEventListener('mouseleave', () => {
+    if (hideTimer === null && remainingMs > 0) {
+        scheduleHide(remainingMs);
+    }
 });
 
 popup.addEventListener('click', async () => {
