@@ -1,7 +1,24 @@
 use crate::settings::{LLMProvider, SettingsData};
 use reqwest::Client;
 use serde_json::{json, Value};
+use std::sync::OnceLock;
 use std::time::Duration;
+
+/// One process-lifetime HTTP client so cloud LLM calls reuse pooled TCP/TLS
+/// connections (no handshake per dictation) and fail fast (3s connect) on an
+/// unreachable endpoint instead of waiting out the full request timeout.
+fn http_client() -> &'static Client {
+    static HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
+    HTTP_CLIENT.get_or_init(|| {
+        Client::builder()
+            .connect_timeout(Duration::from_secs(3))
+            .pool_idle_timeout(Duration::from_secs(90))
+            .pool_max_idle_per_host(2)
+            .tcp_keepalive(Duration::from_secs(60))
+            .build()
+            .unwrap_or_default()
+    })
+}
 
 /// Process transcribed text through an LLM API
 pub async fn process(
@@ -35,8 +52,8 @@ pub async fn process(
     // Dict Cloud: the managed backend builds the prompt and calls the upstream
     // model, so the client just sends the raw text + context.
     if matches!(settings.llm_provider, LLMProvider::Dictcloud) {
-        let client = Client::new();
-        return match call_dictcloud(&client, text, settings, frontmost_app, dictionary_entries).await
+        let client = http_client();
+        return match call_dictcloud(client, text, settings, frontmost_app, dictionary_entries).await
         {
             Ok(cleaned) if !cleaned.is_empty() => cleaned,
             Ok(_) => {
@@ -61,13 +78,13 @@ pub async fn process(
     };
 
     let system_prompt = build_system_prompt(settings, frontmost_app, dictionary_entries);
-    let client = Client::new();
+    let client = http_client();
 
     let result = match settings.llm_provider {
         LLMProvider::Anthropic => {
-            call_anthropic(&client, endpoint, &system_prompt, text, settings).await
+            call_anthropic(client, endpoint, &system_prompt, text, settings).await
         }
-        _ => call_openai(&client, endpoint, &system_prompt, text, settings).await,
+        _ => call_openai(client, endpoint, &system_prompt, text, settings).await,
     };
 
     match result {

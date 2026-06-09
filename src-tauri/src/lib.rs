@@ -737,8 +737,18 @@ fn start_recording(app: &AppHandle) {
         let app_handle = app.clone();
         let mut capture = state.audio_capture.lock().unwrap();
 
+        // Throttle the level updates to ~30fps and send them only to the overlay
+        // window. The cpal callback fires ~100x/sec; emitting an app-wide event
+        // each time is needless IPC/serialization while recording.
+        let level_start = std::time::Instant::now();
+        let last_level_ms = std::sync::atomic::AtomicU64::new(0);
         capture.set_level_callback(move |level| {
-            app_handle.emit("audio-level", level).ok();
+            let now_ms = level_start.elapsed().as_millis() as u64;
+            let prev = last_level_ms.load(std::sync::atomic::Ordering::Relaxed);
+            if now_ms.saturating_sub(prev) >= 33 {
+                last_level_ms.store(now_ms, std::sync::atomic::Ordering::Relaxed);
+                app_handle.emit_to("overlay", "audio-level", level).ok();
+            }
         });
 
         let dev = device_id.as_deref();
@@ -899,7 +909,13 @@ fn handle_transcription(app: &AppHandle, text: &str) {
     let app_handle = app.clone();
 
     std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        // process() awaits a single request chain (no concurrency), so a
+        // current-thread runtime is enough and avoids spinning up a worker pool
+        // per dictation.
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         let cleaned = rt.block_on(llm::process(
             &text_owned,
             &settings_data,
@@ -915,12 +931,18 @@ fn handle_transcription(app: &AppHandle, text: &str) {
         let _ = app_handle.emit("transcription-result", &cleaned);
 
         let flow_mode = settings_data.flow_mode;
-        // Give focus a moment to settle back on the user's app after the overlay
-        // closes, then check there's somewhere to paste before sending Cmd+V.
-        std::thread::sleep(std::time::Duration::from_millis(120));
-        if !text_injector::has_editable_focus()
-            || !text_injector::inject_text(&cleaned, flow_mode)
-        {
+        // Poll briefly for focus to settle back on the user's app (instead of a
+        // blind 120ms wait), so the common same-app paste happens near-instantly
+        // while still tolerating a real app-switch. Up to ~120ms in 10ms steps.
+        let mut editable = false;
+        for _ in 0..12 {
+            if text_injector::has_editable_focus() {
+                editable = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if !editable || !text_injector::inject_text(&cleaned, flow_mode) {
             show_fallback(&app_handle, &cleaned);
         }
 

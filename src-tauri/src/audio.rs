@@ -193,8 +193,9 @@ impl AudioCapture {
         tracing::info!("Audio capture stopped");
 
         let (samples, source_rate, _channels) = {
-            let s = self.state.lock().unwrap();
-            (s.samples.clone(), s.sample_rate, s.channels)
+            let mut s = self.state.lock().unwrap();
+            // Move the buffer out instead of cloning it (recording is over).
+            (std::mem::take(&mut s.samples), s.sample_rate, s.channels)
         };
 
         if samples.is_empty() {
@@ -242,7 +243,10 @@ fn resample(samples: &[f32], source_rate: u32, target_rate: u32) -> Result<Vec<f
     )
     .map_err(|e| format!("Failed to create resampler: {}", e))?;
 
-    let mut output = Vec::new();
+    // Pre-size the output to the expected resampled length to avoid reallocations.
+    let est_out =
+        ((samples.len() as u64 * target_rate as u64) / source_rate.max(1) as u64) as usize;
+    let mut output = Vec::with_capacity(est_out + 1024);
     let chunk_size = resampler.input_frames_next();
 
     let mut pos = 0;

@@ -1,6 +1,6 @@
 [package]
 name = "dict"
-version = "0.8.7"
+version = "0.8.8"
 description = "Voice to text via global hotkey — cross-platform"
 edition = "2021"
 
@@ -33,7 +33,7 @@ tokio = { version = "1", features = ["full"] }
 cpal = "0.15"
 rubato = "0.16"
 hound = "3.5"
-arboard = "3"
+arboard = { version = "3", default-features = false }
 enigo = { version = "0.3", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }

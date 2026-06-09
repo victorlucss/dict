@@ -73,11 +73,25 @@ pub fn transcribe(
         return Err(format!("Whisper model not found at: {}", model_path));
     }
 
+    // Use the available cores (capped to avoid contending with the audio/UI
+    // threads), and greedy decoding (beam size 1) which is markedly faster than
+    // the default beam search with negligible accuracy loss on short, clean
+    // dictation.
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get().min(8))
+        .unwrap_or(4)
+        .to_string();
     let args = vec![
         "-m",
         model_path,
         "-l",
         language,
+        "-t",
+        threads.as_str(),
+        "-bs",
+        "1", // greedy beam (faster decode)
+        "-bo",
+        "1",
         "-nt", // no timestamps
         "-np", // no prints
         "-f",
