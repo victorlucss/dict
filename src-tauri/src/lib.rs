@@ -189,11 +189,6 @@ fn save_commands(
 }
 
 #[tauri::command]
-fn find_whisper_binary_cmd() -> Option<String> {
-    whisper::find_whisper_binary().map(|p| p.to_string_lossy().to_string())
-}
-
-#[tauri::command]
 fn open_accessibility_settings() {
     #[cfg(target_os = "macos")]
     {
@@ -797,13 +792,13 @@ fn stop_recording(app: &AppHandle) {
         );
     }
 
-    let wav_path = {
+    let audio = {
         let mut capture = state.audio_capture.lock().unwrap();
         capture.stop()
     };
 
-    match wav_path {
-        Ok(path) => {
+    match audio {
+        Ok(samples) => {
             let app_handle = app.clone();
             std::thread::spawn(move || {
                 let state = app_handle.state::<AppState>();
@@ -815,7 +810,7 @@ fn stop_recording(app: &AppHandle) {
                     )
                 };
 
-                match whisper::transcribe(&path, &model_path, &language) {
+                match whisper::transcribe(&model_path, &samples, &language) {
                     Ok(text) => handle_transcription(&app_handle, &text),
                     Err(e) => {
                         tracing::error!("Whisper error: {}", e);
@@ -843,13 +838,10 @@ fn cancel_recording(app: &AppHandle) {
         }
         *is_rec = false;
     }
-    // Stop capture and discard the WAV; do not transcribe.
-    let discarded = {
+    // Stop capture and discard the captured samples; do not transcribe.
+    {
         let mut capture = state.audio_capture.lock().unwrap();
-        capture.stop()
-    };
-    if let Ok(path) = discarded {
-        let _ = std::fs::remove_file(path);
+        let _ = capture.stop();
     }
     tracing::info!("Recording cancelled (hotkey used as a chord)");
     hide_overlay(app);
@@ -1194,7 +1186,6 @@ pub fn run() {
             save_snippets,
             get_commands,
             save_commands,
-            find_whisper_binary_cmd,
             open_accessibility_settings,
             open_config_file,
             get_fallback_text,

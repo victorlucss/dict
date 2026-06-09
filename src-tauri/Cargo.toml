@@ -32,7 +32,10 @@ futures-util = "0.3"
 tokio = { version = "1", features = ["full"] }
 cpal = "0.15"
 rubato = "0.16"
-hound = "3.5"
+# whisper.cpp embedded in-process: load the model once, keep it warm in RAM, and
+# transcribe f32 samples directly (no subprocess, no disk WAV). Metal GPU added on
+# macOS below.
+whisper-rs = "0.16"
 arboard = { version = "3", default-features = false }
 enigo = { version = "0.3", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
@@ -45,6 +48,8 @@ block2 = "0.6"
 window-vibrancy = "0.6"
 core-foundation = "0.10"
 core-foundation-sys = "0.8"
+# Metal GPU acceleration for whisper.cpp on Apple Silicon (CPU elsewhere).
+whisper-rs = { version = "0.16", features = ["metal"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }

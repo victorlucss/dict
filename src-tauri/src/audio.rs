@@ -1,8 +1,6 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Stream};
-use hound::{SampleFormat, WavSpec, WavWriter};
 use rubato::{FftFixedIn, Resampler};
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 /// Audio device info returned to the frontend
@@ -187,8 +185,9 @@ impl AudioCapture {
         Ok(())
     }
 
-    /// Stop recording and return the WAV file path
-    pub fn stop(&mut self) -> Result<PathBuf, String> {
+    /// Stop recording and return the captured audio as 16 kHz mono f32 samples,
+    /// ready to feed straight into whisper-rs (no disk round-trip).
+    pub fn stop(&mut self) -> Result<Vec<f32>, String> {
         self.stream = SendStream(None); // Drop the stream to stop recording
         tracing::info!("Audio capture stopped");
 
@@ -215,20 +214,9 @@ impl AudioCapture {
             samples
         };
 
-        // Write WAV file
-        let temp_dir = std::env::temp_dir();
-        let filename = format!("dict_{}.wav", uuid::Uuid::new_v4());
-        let wav_path = temp_dir.join(filename);
+        tracing::info!("Resampled to 16kHz: {} frames", resampled.len());
 
-        write_wav(&resampled, &wav_path)?;
-
-        tracing::info!(
-            "Wrote WAV: {} ({} frames)",
-            wav_path.display(),
-            resampled.len()
-        );
-
-        Ok(wav_path)
+        Ok(resampled)
     }
 }
 
@@ -282,28 +270,3 @@ fn resample(samples: &[f32], source_rate: u32, target_rate: u32) -> Result<Vec<f
     Ok(output)
 }
 
-/// Write samples to a 16kHz, 16-bit, mono WAV file
-fn write_wav(samples: &[f32], path: &PathBuf) -> Result<(), String> {
-    let spec = WavSpec {
-        channels: 1,
-        sample_rate: 16000,
-        bits_per_sample: 16,
-        sample_format: SampleFormat::Int,
-    };
-
-    let mut writer =
-        WavWriter::create(path, spec).map_err(|e| format!("Failed to create WAV: {}", e))?;
-
-    for &sample in samples {
-        let int_sample = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
-        writer
-            .write_sample(int_sample)
-            .map_err(|e| format!("Failed to write sample: {}", e))?;
-    }
-
-    writer
-        .finalize()
-        .map_err(|e| format!("Failed to finalize WAV: {}", e))?;
-
-    Ok(())
-}
