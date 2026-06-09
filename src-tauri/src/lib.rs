@@ -847,9 +847,31 @@ fn cancel_recording(app: &AppHandle) {
     hide_overlay(app);
 }
 
+/// Whisper emits these literal markers for non-speech segments.
+const WHISPER_NON_SPEECH_MARKERS: &[&str] =
+    &["[blank_audio]", "[silence]", "(silence)", "[ silence ]", "[music]", "[ pause ]"];
+
+/// True when a transcription carries no real spoken content: empty after trim,
+/// a known Whisper non-speech marker, or fewer than 2 letters/digits total
+/// (e.g. ".", "...", "!?"). These come from silence/noise hallucinations and
+/// must not be fed to the LLM (which would reply conversationally) or pasted.
+fn is_non_speech(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    let lower = trimmed.to_lowercase();
+    if WHISPER_NON_SPEECH_MARKERS.contains(&lower.as_str()) {
+        return true;
+    }
+    // Count alphanumeric chars (Unicode-aware, so accented letters count).
+    let alnum = trimmed.chars().filter(|c| c.is_alphanumeric()).count();
+    alnum < 2
+}
+
 fn handle_transcription(app: &AppHandle, text: &str) {
-    if text.is_empty() {
-        tracing::info!("Empty transcription, skipping.");
+    if is_non_speech(text) {
+        tracing::info!("Non-speech/degenerate transcription ({:?}), skipping.", text);
         hide_overlay(app);
         return;
     }

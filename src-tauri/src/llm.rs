@@ -20,6 +20,63 @@ fn http_client() -> &'static Client {
     })
 }
 
+/// Heuristic: does `reply` look like the model talking ABOUT the cleanup task
+/// (a refusal/meta/chat reply) rather than a cleaned version of `original`?
+/// Used to discard chat replies and fall back to the raw transcription.
+fn looks_like_meta_reply(reply: &str, original: &str) -> bool {
+    let r = reply.trim();
+    if r.is_empty() {
+        return false; // empty is handled separately by the caller
+    }
+    let lower = r.to_lowercase();
+
+    // Phrases that only appear when the model is addressing the user, not cleaning.
+    const META_MARKERS: &[&str] = &[
+        "i can only",
+        "i'm ready",
+        "i am ready",
+        "please provide",
+        "please share",
+        "as an ai",
+        "as a language model",
+        "i cannot",
+        "i can't",
+        "i'm sorry",
+        "i am sorry",
+        "i don't have",
+        "it looks like",
+        "the text you provided",
+        "the transcription you",
+        "speech-to-text transcription",
+        "no transcription",
+        "there is no",
+        "appears to be in",
+        "language transcription",
+    ];
+    let marker_hit = META_MARKERS.iter().any(|m| lower.contains(m));
+
+    // "transcription" + a soliciting verb is a strong meta signal
+    // ("...provide the transcription...", "...correct the transcription...").
+    let transcription_meta = lower.contains("transcription")
+        && (lower.contains("provide")
+            || lower.contains("clean up")
+            || lower.contains("correct")
+            || lower.contains("i'd")
+            || lower.contains("you'd"));
+
+    if !(marker_hit || transcription_meta) {
+        return false;
+    }
+
+    // Guard against false positives: only treat it as meta if the reply is
+    // meaningfully LONGER than the input (chat replies explain; a real cleanup
+    // is roughly the same length). A genuine dictation that happens to contain
+    // "please provide" stays roughly input-length and is kept.
+    let reply_words = r.split_whitespace().count();
+    let orig_words = original.split_whitespace().count();
+    reply_words >= 8 && reply_words > orig_words * 2
+}
+
 /// Process transcribed text through an LLM API
 pub async fn process(
     text: &str,
@@ -55,11 +112,18 @@ pub async fn process(
         let client = http_client();
         return match call_dictcloud(client, text, settings, frontmost_app, dictionary_entries).await
         {
-            Ok(cleaned) if !cleaned.is_empty() => cleaned,
-            Ok(_) => {
+            Ok(cleaned) if cleaned.is_empty() => {
                 tracing::warn!("Dict Cloud returned empty response, using raw transcription");
                 text.to_string()
             }
+            Ok(cleaned) if looks_like_meta_reply(&cleaned, text) => {
+                tracing::warn!(
+                    "Dict Cloud returned a meta/refusal reply; using raw transcription. Reply: {:?}",
+                    cleaned
+                );
+                text.to_string()
+            }
+            Ok(cleaned) => cleaned,
             Err(e) => {
                 tracing::warn!("Dict Cloud request failed: {}. Using raw transcription.", e);
                 text.to_string()
@@ -88,11 +152,18 @@ pub async fn process(
     };
 
     match result {
-        Ok(cleaned) if !cleaned.is_empty() => cleaned,
-        Ok(_) => {
+        Ok(cleaned) if cleaned.is_empty() => {
             tracing::warn!("LLM returned empty response, using raw transcription");
             text.to_string()
         }
+        Ok(cleaned) if looks_like_meta_reply(&cleaned, text) => {
+            tracing::warn!(
+                "LLM returned a meta/refusal reply; using raw transcription. Reply: {:?}",
+                cleaned
+            );
+            text.to_string()
+        }
+        Ok(cleaned) => cleaned,
         Err(e) => {
             tracing::warn!("LLM request failed: {}. Using raw transcription.", e);
             text.to_string()

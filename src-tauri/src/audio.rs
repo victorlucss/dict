@@ -201,6 +201,14 @@ impl AudioCapture {
             return Err("No audio captured".to_string());
         }
 
+        // Reject clips too short to hold a real utterance (sub-300ms, e.g. an
+        // accidental hotkey tap) — feeding those to Whisper just makes it
+        // hallucinate. 0.3s still leaves room for one-word dictations.
+        let min_samples = (source_rate as usize * 3) / 10;
+        if samples.len() < min_samples {
+            return Err("Recording too short".to_string());
+        }
+
         tracing::info!(
             "Captured {} samples at {}Hz",
             samples.len(),
