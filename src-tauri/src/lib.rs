@@ -295,6 +295,28 @@ fn open_onboarding(app: &AppHandle) {
     .ok();
 }
 
+/// Move the persistent overlay window to the position implied by the current
+/// overlay_position setting (the setting may have changed since it was created).
+fn position_overlay_window(app: &AppHandle, win: &tauri::WebviewWindow, width: f64, height: f64) {
+    let position = {
+        let state = app.state::<AppState>();
+        let s = state.settings.lock().unwrap();
+        s.data.overlay_position.clone()
+    };
+    if let Some(monitor) = app.primary_monitor().ok().flatten() {
+        let screen_size = monitor.size();
+        let scale = monitor.scale_factor();
+        let screen_w = screen_size.width as f64 / scale;
+        let screen_h = screen_size.height as f64 / scale;
+        let x = (screen_w - width) / 2.0;
+        let y = match position {
+            settings::OverlayPosition::Top => 60.0,
+            settings::OverlayPosition::Bottom => screen_h - height - 12.0,
+        };
+        let _ = win.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
+    }
+}
+
 fn show_overlay(app: &AppHandle) {
     // Save the frontmost app BEFORE creating the overlay (so we can restore focus)
     #[cfg(target_os = "macos")]
@@ -303,8 +325,17 @@ fn show_overlay(app: &AppHandle) {
         NSWorkspace::sharedWorkspace().frontmostApplication()
     };
 
+    let (width, height) = (72.0, 28.0);
+
+    // Reuse the one persistent overlay window if it exists: reposition, reset its
+    // animation, and show it. We NEVER close/recreate the overlay — wry leaks the
+    // WKWebView on close (it retains it on drop), so recreating it per dictation
+    // grows native memory without bound until the machine OOMs. Exactly one overlay
+    // webview lives for the app's whole lifetime.
     if let Some(win) = app.get_webview_window("overlay") {
-        win.show().ok();
+        position_overlay_window(app, &win, width, height);
+        let _ = win.emit("overlay-state", serde_json::json!({ "recording": true }));
+        let _ = win.show();
         #[cfg(target_os = "macos")]
         restore_focus(prev_app);
         return;
@@ -315,8 +346,6 @@ fn show_overlay(app: &AppHandle) {
         let s = state.settings.lock().unwrap();
         s.data.overlay_position.clone()
     };
-
-    let (width, height) = (72.0, 28.0);
 
     let mut builder = WebviewWindowBuilder::new(
         app,
@@ -390,7 +419,11 @@ fn restore_focus(prev_app: Option<objc2::rc::Retained<objc2_app_kit::NSRunningAp
 
 fn hide_overlay(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("overlay") {
-        win.close().ok();
+        // Pause the overlay's animation, then HIDE — never close. Closing would leak
+        // the WKWebView (wry retains it on drop); hiding keeps the single persistent
+        // window so memory stays flat across dictations.
+        let _ = win.emit("overlay-state", serde_json::json!({ "idle": true }));
+        let _ = win.hide();
     }
 }
 
@@ -550,8 +583,10 @@ fn show_fallback(app: &AppHandle, text: &str) {
         }
     }
 
-    // Already open: refresh its text + restart its countdown, don't rebuild.
+    // Reuse the persistent fallback window: show it again (it hides, never closes,
+    // to avoid the wry WKWebView-on-close leak) and refresh its text + countdown.
     if let Some(win) = app.get_webview_window("fallback") {
+        let _ = win.show();
         let _ = win.emit("fallback-show", text);
         return;
     }

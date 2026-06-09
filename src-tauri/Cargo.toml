@@ -1,6 +1,6 @@
 [package]
 name = "dict"
-version = "0.8.6"
+version = "0.8.7"
 description = "Voice to text via global hotkey — cross-platform"
 edition = "2021"
 

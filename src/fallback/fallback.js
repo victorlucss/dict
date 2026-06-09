@@ -31,10 +31,11 @@ function render(text) {
     restartCountdown();
 }
 
-// The popup closes once the ring fully depletes. Hovering pauses the animation
-// (CSS), so this won't fire while the user is reading/hovering.
+// The popup hides once the ring fully depletes. Hovering pauses the animation
+// (CSS), so this won't fire while the user is reading/hovering. We HIDE rather
+// than close so the WKWebView is reused (closing it leaks the webview in wry).
 ringFill.addEventListener('animationend', () => {
-    getCurrentWindow().close().catch(() => {});
+    getCurrentWindow().hide().catch(() => {});
 });
 
 popup.addEventListener('click', async () => {

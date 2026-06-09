@@ -30,20 +30,44 @@ const overlay = document.getElementById('overlay');
 listen('audio-level', (event) => {
     if (isProcessing) return;
     targetLevel = Math.max(0, Math.min(1, event.payload));
+    startLoop(); // resume if we were paused while hidden
 });
+
+// The overlay window is now persistent (hidden between dictations, not destroyed),
+// so the animation loop must PAUSE when idle instead of spinning forever. We track
+// a `running` flag and the rAF id so we can cancel it on 'idle' and resume on show.
+let rafId = null;
+let running = false;
+
+function startLoop() {
+    if (running) return;
+    running = true;
+    rafId = requestAnimationFrame(animate);
+}
+
+function stopLoop() {
+    running = false;
+    if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+    }
+}
 
 // Animation loop: ease displayLevel toward targetLevel (fast up, soft down) and
 // render with a gentle undulation so the bars feel alive rather than sharp.
 function animate() {
+    if (!running) return;
     if (!isProcessing) {
         const factor = targetLevel > displayLevel ? 0.3 : 0.12;
         displayLevel += (targetLevel - displayLevel) * factor;
         phase += 0.16;
         renderDots(displayLevel, phase);
     }
-    requestAnimationFrame(animate);
+    rafId = requestAnimationFrame(animate);
 }
-requestAnimationFrame(animate);
+// Run on load so the first overlay animates immediately; later shows resume via the
+// 'recording' state and hides pause via the 'idle' state.
+startLoop();
 
 // Listen for state changes
 listen('overlay-state', (event) => {
@@ -53,12 +77,21 @@ listen('overlay-state', (event) => {
         overlay.classList.toggle('warning', !!state.warning);
     }
 
-    // A fresh recording / overlay show clears any previous warning state.
+    // Overlay hidden between dictations: pause all animation so the persistent
+    // (hidden) window does zero background work.
+    if (state.idle) {
+        stopProcessing();
+        stopLoop();
+        return;
+    }
+
+    // A fresh recording / overlay show clears any previous warning state and resumes.
     if (state.recording) {
         overlay.classList.remove('warning');
         targetLevel = 0;
         displayLevel = 0;
         stopProcessing();
+        startLoop();
     }
 
     if (state.processing) {
