@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Dict?
 
-Dict is a cross-platform (macOS, Linux, Windows) menu-bar/tray app that converts voice to text via a global hotkey. It uses Whisper (local `whisper-cli`) as its STT backend on all platforms, with optional LLM post-processing, and pastes the result into whatever app has focus.
+Dict is a cross-platform (macOS, Linux, Windows) menu-bar/tray app that converts voice to text via a global hotkey. It uses Whisper (embedded whisper.cpp via whisper-rs, model kept warm in RAM) as its STT backend on all platforms, with optional LLM post-processing, and pastes the result into whatever app has focus.
 
 Built with **Rust + Tauri 2.0** for the backend and vanilla HTML/CSS/JS for the frontend.
 
@@ -63,7 +63,7 @@ The app is structured as a Tauri 2.0 application with a Rust backend and HTML/JS
 ```
 Global Hotkey (tauri-plugin-global-shortcut; bare modifiers via native NSEvent monitor on macOS)
     → start_recording() / stop_recording()
-        → Whisper (audio.rs capture → whisper.rs CLI subprocess)
+        → Whisper (audio.rs capture → 16kHz f32 samples → whisper.rs in-process whisper-rs, warm model)
             → LLM Processor (llm.rs: Dict Cloud / OpenAI / Anthropic / OpenRouter / Ollama / LM Studio)
                 → Text Injector (text_injector.rs: arboard clipboard + enigo paste)
 
@@ -90,8 +90,8 @@ Vanilla HTML/CSS/JS with no build step:
 |--------|---------|
 | `lib.rs` | App orchestration, state machine, Tauri commands, tray menu |
 | `settings.rs` | SettingsData, persistence, custom dictionary, snippets, voice commands, history |
-| `audio.rs` | cpal microphone capture, rubato resampling to 16kHz, hound WAV writing |
-| `whisper.rs` | whisper-cli binary discovery and subprocess transcription (the sole STT engine) |
+| `audio.rs` | cpal microphone capture, rubato resampling to 16kHz, returns f32 samples for whisper-rs |
+| `whisper.rs` | Embedded whisper.cpp (whisper-rs): loads the GGML model once into a warm WhisperContext, in-process transcription (the sole STT engine) |
 | `llm.rs` | LLM post-processing (6 providers: Dict Cloud, OpenAI, Anthropic, OpenRouter, Ollama, LM Studio; correction levels 1-5; tone) |
 | `models.rs` | Whisper model catalog + downloader (in-app model manager) |
 | `text_injector.rs` | Clipboard paste via arboard + enigo, key combo simulation |
@@ -104,7 +104,7 @@ Vanilla HTML/CSS/JS with no build step:
 ### Key Design Decisions
 
 - Tauri 2.0 for cross-platform (macOS, Linux, Windows) with a single Rust codebase — no platform-specific STT, so the build has no Swift/native bridge to compile
-- Whisper (`whisper-cli` + a local GGML model) is the sole STT engine on all platforms
+- Whisper (embedded whisper.cpp via whisper-rs; the GGML model is loaded once and kept warm in RAM, Metal-accelerated on Apple Silicon) is the sole STT engine on all platforms
 - Recording has no hard time limit; it runs while the hotkey is held (push-to-talk) or until toggled off
 - `privacy_mode` skips cloud LLM providers (Dict Cloud / OpenAI / Anthropic / OpenRouter) and suppresses history persistence; local providers (Ollama, LM Studio) still run
 - Dict Cloud is managed cleanup via a Convex backend, gated per-user by a `cloud_cleanup` feature flag; the client only shows it as a provider when signed in and the flag is on
@@ -126,5 +126,5 @@ Currently English and Brazilian Portuguese. The `whisper_language` setting maps 
 - **macOS 14+** / **Linux** (with GTK3, WebKitGTK) / **Windows 10+**
 - Microphone permission (prompted automatically)
 - Accessibility permission on macOS (for text pasting — granted manually in System Settings)
-- `brew install whisper-cpp` (or the platform equivalent) + a GGML model file — **required**, this is the only STT engine. Point `whisperModelPath` at the model in Preferences → Speech.
+- A GGML model file (the in-app model manager downloads one) — required. whisper.cpp is embedded, so there is no separate engine to install.
 - An OpenAI-compatible API endpoint if LLM cleanup is enabled

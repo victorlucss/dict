@@ -23,7 +23,7 @@ Runs on **macOS, Linux, and Windows**.
 
 ## Features
 
-- **Local transcription** — Whisper (`whisper-cli` + a GGML model) runs on-device. Your audio never leaves your machine.
+- **Local transcription** — Whisper (embedded whisper.cpp + a GGML model) runs on-device. Your audio never leaves your machine.
 - **Optional cleanup** — fix grammar and drop fillers via Ollama, LM Studio, OpenAI, Anthropic, OpenRouter, or managed **Dict Cloud**. Five correction levels and a tone setting.
 - **Works everywhere you type** — pastes into any app via the clipboard.
 - **Voice snippets** — say a trigger, get a full expansion.
@@ -38,14 +38,9 @@ Download the installer for your platform from the
 [latest release](https://github.com/victorlucss/dict/releases/latest), or grab it from
 [dict.studio](https://dict.studio). Existing installs update themselves over the air.
 
-You also need Whisper and a model:
-
-```bash
-brew install whisper-cpp   # or your platform's equivalent
-```
-
-Then download a GGML model (the in-app model manager under **Preferences → Speech**
-can do this for you), and point `whisperModelPath` at it.
+Whisper is built in (whisper.cpp is embedded, Metal-accelerated on Apple Silicon),
+so there's nothing else to install. You just need a model: the in-app model manager
+under **Preferences → Speech** downloads a GGML model for you.
 
 ## Build from source
 
@@ -66,7 +61,7 @@ cargo tauri build    # release bundle
 ## How it works
 
 ```
-Hotkey → record (cpal) → Whisper (whisper-cli) → optional LLM cleanup → paste (clipboard + key sim)
+Hotkey → record (cpal) → Whisper (embedded whisper.cpp) → optional LLM cleanup → paste (clipboard + key sim)
 ```
 
 Built with **Rust + Tauri 2.0**; the frontend is vanilla HTML/CSS/JS (no build step).
@@ -78,7 +73,7 @@ every config key.
 - macOS 14+ / Linux (GTK3, WebKitGTK) / Windows 10+
 - Microphone permission (prompted automatically)
 - Accessibility permission on macOS (for pasting into other apps)
-- `whisper-cpp` + a GGML model
+- A GGML model (downloaded in-app; whisper.cpp is embedded, no separate install)
 - An OpenAI-compatible endpoint or a Dict Cloud account if you enable LLM cleanup
 
 ## Languages
