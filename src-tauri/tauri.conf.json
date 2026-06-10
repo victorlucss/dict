@@ -1,6 +1,6 @@
 {
   "productName": "Dict",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "identifier": "com.dict.dictation",
   "build": {
     "frontendDist": "../src",

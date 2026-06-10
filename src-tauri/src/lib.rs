@@ -1137,23 +1137,34 @@ fn install_modifier_monitor(app: &AppHandle) {
     // KeyDown monitors: cancel an in-progress bare-modifier dictation when the user
     // presses another key (using the modifier as a chord). Observe-only — the key
     // still reaches the focused app so chords like Option+Arrow keep working.
-    let app_global_key = app.clone();
-    let global_key = block2::RcBlock::new(move |_event: NonNull<NSEvent>| {
-        dispatch_key_down(&app_global_key);
-    });
-    let _global_key_token =
-        NSEvent::addGlobalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &global_key);
-    std::mem::forget(global_key);
+    //
+    // TEMPORARILY DISABLED: this was too aggressive and killed normal dictation
+    // (e.g. the old Option+Space muscle-memory tap fires a KeyDown ~0.25s in and
+    // cancels every recording). Re-enable with a startup grace period — ignore
+    // KeyDowns for the first ~400ms after recording starts — so only a genuine
+    // mid-dictation chord cancels. Kept behind a flag so the wiring stays live.
+    const CHORD_CANCEL_ENABLED: bool = false;
+    if CHORD_CANCEL_ENABLED {
+        let app_global_key = app.clone();
+        let global_key = block2::RcBlock::new(move |_event: NonNull<NSEvent>| {
+            dispatch_key_down(&app_global_key);
+        });
+        let _global_key_token = NSEvent::addGlobalMonitorForEventsMatchingMask_handler(
+            NSEventMask::KeyDown,
+            &global_key,
+        );
+        std::mem::forget(global_key);
 
-    let app_local_key = app.clone();
-    let local_key = block2::RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
-        dispatch_key_down(&app_local_key);
-        event.as_ptr()
-    });
-    let _local_key_token = unsafe {
-        NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &local_key)
-    };
-    std::mem::forget(local_key);
+        let app_local_key = app.clone();
+        let local_key = block2::RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
+            dispatch_key_down(&app_local_key);
+            event.as_ptr()
+        });
+        let _local_key_token = unsafe {
+            NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &local_key)
+        };
+        std::mem::forget(local_key);
+    }
 
     tracing::info!("Modifier-key monitor installed");
 }

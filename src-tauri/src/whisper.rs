@@ -55,12 +55,14 @@ pub fn transcribe(model_path: &str, samples: &[f32], language: &str) -> Result<S
         .map(|n| n.get().min(8) as i32)
         .unwrap_or(4);
 
-    // Greedy decoding (beam size 1): markedly faster than beam search with
-    // negligible accuracy loss on short, clean dictation.
+    // Greedy argmax (deterministic at temperature 0). Beam search is slightly more
+    // accurate but triggers a whisper.cpp Metal teardown assert on app quit, so we
+    // stay on greedy; the real accuracy wins are dropping single_segment + relaxing
+    // the confidence gate below.
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     params.set_n_threads(threads);
     if !language.is_empty() {
-        // "auto" is a valid whisper language code (triggers detection).
+        // Keep the user's setting, including "auto" (they dictate in EN and PT).
         params.set_language(Some(language));
     }
     params.set_translate(false);
@@ -69,16 +71,16 @@ pub fn transcribe(model_path: &str, samples: &[f32], language: &str) -> Result<S
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
 
-    // Anti-hallucination hardening for short single-shot dictation. The big one is
-    // temperature_inc=0, which disables whisper.cpp's temperature fallback — the
-    // retry-at-rising-temperature loop that fabricates fluent text (e.g. an entire
-    // Icelandic sentence) out of silence/noise.
+    // The actual silence-hallucination fix (load-bearing — keep both): temperature_inc=0
+    // disables whisper.cpp's rising-temperature fallback, the retry loop that fabricates
+    // fluent text (e.g. an Icelandic sentence) out of silence/noise. A clean utterance
+    // never needs the fallback, so this does NOT hurt real speech.
     params.set_temperature(0.0);
     params.set_temperature_inc(0.0);
-    params.set_no_context(true); // never seed the decoder from prior text
-    params.set_single_segment(true); // one clip -> at most one segment
+    params.set_no_context(true); // no cross-dictation bleed (the model is reused)
     params.set_suppress_blank(true);
-    params.set_suppress_nst(true); // suppress non-speech tokens
+    // NOTE: do NOT set single_segment (it truncated real dictation) or suppress_nst
+    // (it could alter real words); the post-filters + the gate below handle noise.
 
     state
         .full(params, samples)
@@ -87,10 +89,14 @@ pub fn transcribe(model_path: &str, samples: &[f32], language: &str) -> Result<S
     // Confidence-gate each segment: the model's own no-speech probability and the
     // mean per-token probability flag noise/hallucinations, which we drop. This
     // catches the noise cases regardless of the (possibly auto-detected) language.
-    const NO_SPEECH_THOLD: f32 = 0.6;
-    // Lenient on purpose: only drop clearly low-confidence (garbage) segments so we
-    // never discard real, quietly-spoken dictation. no_speech_prob is the primary gate.
-    const MIN_AVG_TOKEN_PROB: f32 = 0.35;
+    // Very high on purpose: real speech can score a surprisingly high no_speech_prob
+    // (observed ~0.75 on genuine English dictation), so a low threshold drops REAL
+    // words. Only near-certain silence (>0.95) is dropped here; temperature_inc=0 and
+    // is_non_speech() are the primary silence defenses.
+    const NO_SPEECH_THOLD: f32 = 0.95;
+    // token_probability() is a LINEAR probability; correct short speech (esp. pt-BR /
+    // punctuation) routinely averages 0.3-0.5, so 0.20 only catches near-random garbage.
+    const MIN_AVG_TOKEN_PROB: f32 = 0.20;
 
     let n = state.full_n_segments();
     let mut text = String::new();
