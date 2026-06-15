@@ -134,7 +134,8 @@ pub fn transcribe(model_path: &str, samples: &[f32], language: &str) -> Result<S
     let text = text.trim();
     // Reject degenerate output: empty, or no actual letters/digits (e.g. ".").
     if text.is_empty() || !text.chars().any(|c| c.is_alphanumeric()) {
-        tracing::info!("Rejecting non-speech transcription: {:?}", text);
+        tracing::info!("Rejecting non-speech transcription ({} chars)", text.chars().count());
+        tracing::debug!("Rejected content: {:?}", text);
         return Ok(String::new());
     }
 

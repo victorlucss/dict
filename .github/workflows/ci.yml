@@ -1,0 +1,36 @@
+# Pre-merge CI: check + test on every push/PR. Until this existed, cargo test
+# only ever ran inside the release pipeline — after the version was already
+# bumped. Runs on macOS because that's the primary platform and the runner
+# needs no extra system deps (Linux needs the whole webkitgtk/alsa stack).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Check & test (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # whisper-rs compiles whisper.cpp from source (~10 min cold); cache it.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: cargo check
+        working-directory: src-tauri
+        run: cargo check --locked
+
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test --locked

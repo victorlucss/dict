@@ -7,6 +7,12 @@ on:
 permissions:
   contents: write
 
+# Two quick pushes must not race each other against the same draft release /
+# latest.json. Queue runs instead (no cancel: killing a half-published release
+# is worse than waiting).
+concurrency:
+  group: release
+
 jobs:
   # Only release when the version in tauri.conf.json doesn't already have a tag.
   check-version:
@@ -179,6 +185,17 @@ jobs:
 
           echo "--- latest.json ---"
           cat latest.json
+
+          # Refuse to publish a manifest missing any platform: OTA clients on a
+          # missing platform would silently stop seeing updates (asset-name
+          # drift has caused exactly this before). The release stays a draft so
+          # the fix is to re-run, not to roll back a live manifest.
+          for key in darwin-aarch64 darwin-x86_64 linux-x86_64 windows-x86_64; do
+            if ! jq -e --arg k "$key" '.platforms | has($k)' latest.json >/dev/null; then
+              echo "::error::latest.json is missing platform '$key' — leaving the release as a draft"
+              exit 1
+            fi
+          done
 
           gh release upload "$TAG" latest.json --repo "$REPO" --clobber
 

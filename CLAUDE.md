@@ -30,15 +30,15 @@ cd src-tauri && cargo tauri dev
 cd src-tauri && cargo tauri build
 ```
 
-Tests: 4 unit tests in `src-tauri/src/settings.rs` (run via `cargo test`). No linter configured.
+Tests: unit tests in `src-tauri/src/settings.rs` and `src-tauri/src/lib.rs` (run via `cargo test`). CI runs `cargo check` + `cargo test` on every push/PR (`.github/workflows/ci.yml`). No linter configured.
 
 ## Releasing
 
-Versioning follows semver. The version lives in `src-tauri/tauri.conf.json` (the `version` field).
+Versioning follows semver. The version is duplicated in **both** `src-tauri/tauri.conf.json` (drives the release pipeline + OTA version) and `src-tauri/Cargo.toml` (drives the tray label + `X-Dict-Version` header) — bump both together or they diverge. `cargo build`/`cargo test` then updates `Cargo.lock` to match.
 
 ### Automated (GitHub Actions)
 
-1. Bump the version in `src-tauri/tauri.conf.json`
+1. Bump the version in `src-tauri/tauri.conf.json` **and** `src-tauri/Cargo.toml` (keep them equal), then run `cargo check` so `Cargo.lock` updates
 2. Commit and push to `main`
 3. The GitHub Actions pipeline (`.github/workflows/release.yml`) automatically:
    - Builds for macOS (aarch64 + x86_64), Linux (x86_64), and Windows (x86_64)
@@ -105,7 +105,7 @@ Vanilla HTML/CSS/JS with no build step:
 
 - Tauri 2.0 for cross-platform (macOS, Linux, Windows) with a single Rust codebase — no platform-specific STT, so the build has no Swift/native bridge to compile
 - Whisper (embedded whisper.cpp via whisper-rs; the GGML model is loaded once and kept warm in RAM, Metal-accelerated on Apple Silicon) is the sole STT engine on all platforms
-- Recording has no hard time limit; it runs while the hotkey is held (push-to-talk) or until toggled off
+- Recording runs while the hotkey is held (push-to-talk) or until toggled off, with a 10-minute safety cap (`audio::MAX_RECORDING_SECS`): the capture callback stops buffering at the cap and a per-recording watchdog thread auto-stops the session. On macOS the watchdog also stops bare-modifier PTT recordings whose Release event was lost (secure-input fields, screen lock, left/right modifier aliasing) by polling `CGEventSourceKeyState`. The tray shows 🔴 while recording
 - `privacy_mode` skips cloud LLM providers (Dict Cloud / OpenAI / Anthropic / OpenRouter) and suppresses history persistence; local providers (Ollama, LM Studio) still run
 - Dict Cloud is managed cleanup via a Convex backend, gated per-user by a `cloud_cleanup` feature flag; the client only shows it as a provider when signed in and the flag is on
 - OTA self-updates via `tauri-plugin-updater` against a signed `latest.json` on GitHub releases (requires a public repo); the release CI rebuilds `latest.json` once across all platforms

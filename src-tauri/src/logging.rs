@@ -2,18 +2,32 @@ use std::fs;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 /// Initialize logging to file and stdout.
-/// Log file: /tmp/dict.log (macOS/Linux), %TEMP%/dict.log (Windows)
+///
+/// Log file: `<config dir>/dict.log` (e.g. ~/.config/dict/dict.log), NOT /tmp:
+/// /tmp is world-readable and wiped on reboot — the one time the log matters
+/// most (the machine died overnight) is exactly when a /tmp log vanishes.
+/// The previous run's log is rotated to dict.log.1 instead of truncated, so a
+/// crash report can always be paired with the run that produced it.
 pub fn init() {
-    let log_path = log_file_path();
+    let log_path = crate::settings::config_directory().join("dict.log");
+    let _ = fs::create_dir_all(crate::settings::config_directory());
 
-    // Clear log on start (match Swift behavior)
-    let _ = fs::write(&log_path, "");
+    // Rotate: keep exactly one previous generation for post-mortems.
+    let _ = fs::rename(&log_path, log_path.with_extension("log.1"));
 
     let file = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&log_path)
         .expect("Failed to open log file");
+
+    // Owner-only: log lines include device names, hotkey config, and (at debug
+    // level only) transcript content.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = file.set_permissions(fs::Permissions::from_mode(0o600));
+    }
 
     let file_layer = fmt::layer()
         .with_writer(file)
@@ -32,15 +46,4 @@ pub fn init() {
         .with(file_layer)
         .with(stdout_layer)
         .init();
-}
-
-fn log_file_path() -> String {
-    if cfg!(target_os = "windows") {
-        let temp = std::env::var("TEMP")
-            .or_else(|_| std::env::var("TMP"))
-            .unwrap_or_else(|_| ".".to_string());
-        format!("{}/dict.log", temp)
-    } else {
-        "/tmp/dict.log".to_string()
-    }
 }

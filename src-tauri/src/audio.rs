@@ -64,11 +64,22 @@ fn get_input_device(device_id: Option<&str>) -> Option<Device> {
     }
 }
 
+/// Hard safety cap on a single recording. A recording that never stops (missed
+/// push-to-talk release, forgotten toggle) grows the sample buffer ~690MB/hour
+/// at 48kHz — left overnight that exhausts memory and panics the machine. The
+/// capture callback stops buffering at this mark, and the recording watchdog in
+/// lib.rs auto-stops the session at the same mark.
+pub const MAX_RECORDING_SECS: u64 = 600;
+
 /// Shared state for audio recording
 struct RecordingState {
     samples: Vec<f32>,
     sample_rate: u32,
     channels: u16,
+    /// Cap on `samples` length (mono frames), derived from the device sample rate.
+    max_samples: usize,
+    /// True once the cap was hit (so we log the drop only once).
+    capped: bool,
 }
 
 /// Active audio capture session
@@ -86,6 +97,8 @@ impl AudioCapture {
                 samples: Vec::new(),
                 sample_rate: 44100,
                 channels: 1,
+                max_samples: 44100 * MAX_RECORDING_SECS as usize,
+                capped: false,
             })),
             level_callback: Arc::new(Mutex::new(None)),
         }
@@ -117,6 +130,8 @@ impl AudioCapture {
             s.samples.clear();
             s.sample_rate = sample_rate;
             s.channels = channels;
+            s.max_samples = sample_rate as usize * MAX_RECORDING_SECS as usize;
+            s.capped = false;
         }
 
         let state = self.state.clone();
@@ -166,7 +181,19 @@ impl AudioCapture {
                     }
 
                     if let Ok(mut s) = state.lock() {
-                        s.samples.extend_from_slice(&mono_samples);
+                        let room = s.max_samples.saturating_sub(s.samples.len());
+                        if room == 0 {
+                            if !s.capped {
+                                s.capped = true;
+                                tracing::warn!(
+                                    "Recording hit the {}s safety cap; dropping further audio",
+                                    MAX_RECORDING_SECS
+                                );
+                            }
+                        } else {
+                            let take = mono_samples.len().min(room);
+                            s.samples.extend_from_slice(&mono_samples[..take]);
+                        }
                     }
                 },
                 move |err| {

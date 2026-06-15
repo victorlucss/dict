@@ -1,6 +1,27 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// Write a JSON store atomically: serialize to a sibling temp file, restrict
+/// its permissions (0600 on Unix — config.json holds API keys and the Dict
+/// Cloud token; history.json holds transcripts), then rename over the target.
+/// A crash mid-write can therefore never truncate or corrupt the store, and a
+/// replaced file always ends up owner-only regardless of its previous mode.
+fn write_json_atomic(path: &Path, json: &str) -> Result<(), String> {
+    let dir = path
+        .parent()
+        .ok_or_else(|| format!("No parent directory for {}", path.display()))?;
+    fs::create_dir_all(dir).map_err(|e| format!("Failed to create config dir: {}", e))?;
+
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, json).map_err(|e| format!("Failed to write {}: {}", tmp.display(), e))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
+    }
+    fs::rename(&tmp, path).map_err(|e| format!("Failed to replace {}: {}", path.display(), e))
+}
 
 // ─── Enums ──────────────────────────────────────────────
 
@@ -188,21 +209,29 @@ pub struct HistoryEntry {
 
 pub struct AppSettings {
     pub data: SettingsData,
-    config_dir: PathBuf,
     config_file: PathBuf,
 }
 
 impl AppSettings {
     pub fn load() -> Self {
-        let config_dir = config_directory();
-        let config_file = config_dir.join("config.json");
+        let config_file = config_directory().join("config.json");
 
         let data = if config_file.exists() {
             match fs::read_to_string(&config_file) {
                 Ok(json) => match serde_json::from_str::<SettingsData>(&json) {
                     Ok(d) => d,
                     Err(e) => {
-                        tracing::warn!("Failed to parse settings: {}. Using defaults.", e);
+                        // Don't silently destroy the user's config — it holds API
+                        // keys and the Dict Cloud token, and the save() below
+                        // would overwrite it with defaults. Keep the unparseable
+                        // file aside for manual recovery.
+                        let backup = config_file.with_extension("json.corrupt");
+                        let _ = fs::copy(&config_file, &backup);
+                        tracing::error!(
+                            "Failed to parse settings: {}. Backed up the corrupt file to {} and using defaults.",
+                            e,
+                            backup.display()
+                        );
                         SettingsData::default()
                     }
                 },
@@ -217,7 +246,6 @@ impl AppSettings {
 
         let mut s = Self {
             data,
-            config_dir,
             config_file,
         };
         // Ensure config file exists
@@ -226,16 +254,9 @@ impl AppSettings {
     }
 
     pub fn save(&mut self) -> Result<(), String> {
-        fs::create_dir_all(&self.config_dir)
-            .map_err(|e| format!("Failed to create config dir: {}", e))?;
-
         let json = serde_json::to_string_pretty(&self.data)
             .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-
-        fs::write(&self.config_file, json)
-            .map_err(|e| format!("Failed to write settings: {}", e))?;
-
-        Ok(())
+        write_json_atomic(&self.config_file, &json)
     }
 }
 
@@ -264,11 +285,8 @@ impl CustomDictionary {
     }
 
     pub fn save(&mut self) -> Result<(), String> {
-        let dir = self.file_path.parent().unwrap();
-        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         let json = serde_json::to_string_pretty(&self.entries).map_err(|e| e.to_string())?;
-        fs::write(&self.file_path, json).map_err(|e| e.to_string())?;
-        Ok(())
+        write_json_atomic(&self.file_path, &json)
     }
 
     pub fn add(&mut self, word: &str) {
@@ -310,11 +328,8 @@ impl SnippetsStore {
     }
 
     pub fn save(&mut self) -> Result<(), String> {
-        let dir = self.file_path.parent().unwrap();
-        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         let json = serde_json::to_string_pretty(&self.entries).map_err(|e| e.to_string())?;
-        fs::write(&self.file_path, json).map_err(|e| e.to_string())?;
-        Ok(())
+        write_json_atomic(&self.file_path, &json)
     }
 
     pub fn match_trigger(&self, transcription: &str) -> Option<String> {
@@ -353,11 +368,8 @@ impl VoiceCommandsStore {
     }
 
     pub fn save(&mut self) -> Result<(), String> {
-        let dir = self.file_path.parent().unwrap();
-        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         let json = serde_json::to_string_pretty(&self.entries).map_err(|e| e.to_string())?;
-        fs::write(&self.file_path, json).map_err(|e| e.to_string())?;
-        Ok(())
+        write_json_atomic(&self.file_path, &json)
     }
 
     pub fn match_trigger(&self, transcription: &str) -> Option<String> {
@@ -442,11 +454,8 @@ impl TranscriptionHistory {
     }
 
     fn save(&self) -> Result<(), String> {
-        let dir = self.file_path.parent().unwrap();
-        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         let json = serde_json::to_string_pretty(&self.entries).map_err(|e| e.to_string())?;
-        fs::write(&self.file_path, json).map_err(|e| e.to_string())?;
-        Ok(())
+        write_json_atomic(&self.file_path, &json)
     }
 }
 
@@ -483,7 +492,7 @@ pub fn is_newer_version(remote: &str, current: &str) -> bool {
 }
 
 /// Platform-appropriate config directory
-fn config_directory() -> PathBuf {
+pub(crate) fn config_directory() -> PathBuf {
     if cfg!(target_os = "windows") {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))

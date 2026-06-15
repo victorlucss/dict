@@ -29,6 +29,9 @@ pub struct AppState {
     pub history: Mutex<TranscriptionHistory>,
     pub audio_capture: Mutex<AudioCapture>,
     pub is_recording: Mutex<bool>,
+    /// Bumped on every recording start so a stale watchdog thread (from a
+    /// previous session) can tell it no longer owns `is_recording` and exit.
+    pub recording_generation: std::sync::atomic::AtomicU64,
     pub recording_stopped_at: Mutex<Option<Instant>>,
     /// Transcription staged for the copy-fallback popup to fetch on load (set when
     /// a paste fails). Taken (cleared) by `get_fallback_text`.
@@ -706,6 +709,21 @@ fn build_tray_menu(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Show/clear the recording indicator in the menu bar. The overlay is tiny and
+/// invisible once the display sleeps, so the tray is the glanceable cue that a
+/// recording (including a runaway one) is live. `set_title` shows text next to
+/// the tray icon on macOS; elsewhere only the tooltip applies.
+fn set_tray_recording_indicator(app: &AppHandle, recording: bool) {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let _ = tray.set_title(if recording { Some("🔴") } else { None::<&str> });
+        let _ = tray.set_tooltip(Some(if recording {
+            "Dict — recording"
+        } else {
+            "Dict"
+        }));
+    }
+}
+
 // ─── Recording Orchestration ────────────────────────────
 
 fn start_recording(app: &AppHandle) {
@@ -759,8 +777,81 @@ fn start_recording(app: &AppHandle) {
     }
 
     tracing::info!("Recording started (engine: Whisper)");
+    set_tray_recording_indicator(app, true);
     show_overlay(app);
-    // No recording time limit — record for as long as the hotkey is held / toggled.
+
+    // Safety net: a watchdog auto-stops the recording at the hard cap and, for
+    // bare-modifier push-to-talk, when the key was released but the Release
+    // event never arrived (see recording_watchdog).
+    let generation = state
+        .recording_generation
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        + 1;
+    let app_watchdog = app.clone();
+    std::thread::spawn(move || recording_watchdog(app_watchdog, generation));
+}
+
+/// Safety net for runaway recordings; runs for the lifetime of one session.
+///
+/// 1. Hard cap: auto-stop at `audio::MAX_RECORDING_SECS`. The capture callback
+///    stops buffering at the same mark, so memory stays bounded either way.
+/// 2. Push-to-talk release watchdog (macOS): the NSEvent monitor misses the
+///    bare-modifier Release in real situations (secure-input password fields,
+///    screen lock while held, left/right modifier flag aliasing), and a missed
+///    release records forever — ~690MB/hour at 48kHz, which left overnight
+///    exhausts memory and panics the machine (WindowServer watchdog timeout).
+///    Poll the physical key state and stop when it's no longer held.
+fn recording_watchdog(app: AppHandle, generation: u64) {
+    use std::sync::atomic::Ordering;
+
+    let started = Instant::now();
+    let mut released_polls: u32 = 0;
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let state = app.state::<AppState>();
+
+        // Session over, or a newer recording owns the flag now.
+        if state.recording_generation.load(Ordering::SeqCst) != generation
+            || !*state.is_recording.lock().unwrap()
+        {
+            return;
+        }
+
+        if started.elapsed().as_secs() >= audio::MAX_RECORDING_SECS {
+            tracing::warn!(
+                "Recording hit the {}s safety cap — auto-stopping",
+                audio::MAX_RECORDING_SECS
+            );
+            stop_recording(&app);
+            return;
+        }
+
+        let (mode, hotkey) = {
+            let s = state.settings.lock().unwrap();
+            (s.data.hotkey_mode.clone(), s.data.hotkey.clone())
+        };
+        // Grace period (~1.2s) so a quick tap is decided by its own Release
+        // event, then require two consecutive "not held" reads (~1s apart)
+        // before concluding the release was missed.
+        if mode == settings::HotkeyMode::PushToTalk
+            && is_bare_modifier(&hotkey)
+            && started.elapsed().as_millis() > 1200
+        {
+            if bare_modifier_physically_down(&hotkey) == Some(false) {
+                released_polls += 1;
+                if released_polls >= 2 {
+                    tracing::warn!(
+                        "PTT hotkey '{}' no longer held but no Release event arrived — stopping",
+                        hotkey
+                    );
+                    stop_recording(&app);
+                    return;
+                }
+            } else {
+                released_polls = 0;
+            }
+        }
+    }
 }
 
 fn stop_recording(app: &AppHandle) {
@@ -784,6 +875,7 @@ fn stop_recording(app: &AppHandle) {
     }
 
     tracing::info!("Recording stopped");
+    set_tray_recording_indicator(app, false);
 
     if let Some(win) = app.get_webview_window("overlay") {
         let _ = win.emit(
@@ -844,6 +936,7 @@ fn cancel_recording(app: &AppHandle) {
         let _ = capture.stop();
     }
     tracing::info!("Recording cancelled (hotkey used as a chord)");
+    set_tray_recording_indicator(app, false);
     hide_overlay(app);
 }
 
@@ -870,8 +963,15 @@ fn is_non_speech(text: &str) -> bool {
 }
 
 fn handle_transcription(app: &AppHandle, text: &str) {
+    // Logging policy: transcripts are user content — never log them at the
+    // default (info) level, privacy_mode or not. Content goes to debug! only,
+    // so it reaches the log file solely under an explicit RUST_LOG=debug.
     if is_non_speech(text) {
-        tracing::info!("Non-speech/degenerate transcription ({:?}), skipping.", text);
+        tracing::info!(
+            "Non-speech/degenerate transcription ({} chars), skipping.",
+            text.chars().count()
+        );
+        tracing::debug!("Non-speech content: {:?}", text);
         hide_overlay(app);
         return;
     }
@@ -882,13 +982,15 @@ fn handle_transcription(app: &AppHandle, text: &str) {
         stopped.map(|t| t.elapsed().as_millis()).unwrap_or(0)
     };
 
-    tracing::info!("Transcribed ({}ms): {}", stt_elapsed, text);
+    tracing::info!("Transcribed ({}ms, {} chars)", stt_elapsed, text.chars().count());
+    tracing::debug!("Transcript: {}", text);
 
     // Check snippets
     {
         let snippets = state.snippets.lock().unwrap();
         if let Some(expansion) = snippets.match_trigger(text) {
-            tracing::info!("Snippet matched: \"{}\" → expanding", text);
+            tracing::info!("Snippet matched → expanding");
+            tracing::debug!("Snippet trigger: {:?}", text);
             hide_overlay(app);
             // No editable field (or paste fails) → offer the text via the popup.
             if !text_injector::has_editable_focus()
@@ -904,7 +1006,8 @@ fn handle_transcription(app: &AppHandle, text: &str) {
     {
         let commands = state.commands.lock().unwrap();
         if let Some(key_combo) = commands.match_trigger(text) {
-            tracing::info!("Voice command matched: \"{}\" → {}", text, key_combo);
+            tracing::info!("Voice command matched → {}", key_combo);
+            tracing::debug!("Voice command utterance: {:?}", text);
             hide_overlay(app);
             text_injector::simulate_key_combo(&key_combo);
             return;
@@ -937,7 +1040,8 @@ fn handle_transcription(app: &AppHandle, text: &str) {
             &dictionary_entries,
         ));
 
-        tracing::info!("Final text: {}", cleaned);
+        tracing::info!("Final text ready ({} chars)", cleaned.chars().count());
+        tracing::debug!("Final text: {}", cleaned);
         hide_overlay(&app_handle);
 
         // Broadcast the final text so UIs can react (e.g. the onboarding "try it"
@@ -1063,6 +1167,55 @@ fn bare_modifier_keycode_flag(hotkey: &str) -> Option<(u16, usize)> {
         "RightShift" => (60, SHIFT),
         _ => return None,
     })
+}
+
+/// The macOS virtual key code(s) a bare-modifier hotkey can correspond to.
+/// Generic names ("Option") match either physical key; sided names match one.
+/// Fn is deliberately absent: CGEventSourceKeyState doesn't reliably report it,
+/// and a false "not held" would kill genuine Fn-held dictations.
+#[cfg(target_os = "macos")]
+fn bare_modifier_keycodes(hotkey: &str) -> Option<&'static [u16]> {
+    Some(match hotkey {
+        "Control" => &[59, 62],
+        "LeftControl" => &[59],
+        "RightControl" => &[62],
+        "Option" => &[58, 61],
+        "LeftOption" => &[58],
+        "RightOption" => &[61],
+        "Command" => &[55, 54],
+        "LeftCommand" => &[55],
+        "RightCommand" => &[54],
+        "Shift" => &[56, 60],
+        "LeftShift" => &[56],
+        "RightShift" => &[60],
+        _ => return None,
+    })
+}
+
+/// Poll whether the bare-modifier hotkey's physical key is currently held, via
+/// CGEventSourceKeyState (callable from any thread, no extra TCC permission).
+/// Keycode-precise: a generic "Option" hotkey checks BOTH option keys, so this
+/// is immune to the left/right modifier-flag aliasing that fools the flag-based
+/// event monitor. Returns None when the state can't be determined (non-bare
+/// hotkey, or Fn) — callers must treat None as "still held".
+#[cfg(target_os = "macos")]
+fn bare_modifier_physically_down(hotkey: &str) -> Option<bool> {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventSourceKeyState(state_id: i32, keycode: u16) -> bool;
+    }
+    const COMBINED_SESSION_STATE: i32 = 0; // kCGEventSourceStateCombinedSessionState
+    let keycodes = bare_modifier_keycodes(hotkey)?;
+    Some(
+        keycodes
+            .iter()
+            .any(|&kc| unsafe { CGEventSourceKeyState(COMBINED_SESSION_STATE, kc) }),
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn bare_modifier_physically_down(_hotkey: &str) -> Option<bool> {
+    None
 }
 
 /// Called from the flagsChanged monitor. If the configured hotkey is a bare
@@ -1200,6 +1353,7 @@ pub fn run() {
             history: Mutex::new(TranscriptionHistory::load()),
             audio_capture: Mutex::new(AudioCapture::new()),
             is_recording: Mutex::new(false),
+            recording_generation: std::sync::atomic::AtomicU64::new(0),
             recording_stopped_at: Mutex::new(None),
             fallback_text: Mutex::new(None),
         })
@@ -1351,4 +1505,54 @@ pub fn run() {
                 api.prevent_exit();
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn non_bare_hotkeys_have_no_keycodes() {
+        assert!(!is_bare_modifier("Alt+Space"));
+        #[cfg(target_os = "macos")]
+        {
+            assert!(bare_modifier_keycodes("Alt+Space").is_none());
+            assert!(bare_modifier_keycodes("Fn").is_none()); // deliberately excluded
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn watchdog_keycodes_agree_with_monitor_keycodes() {
+        // Every bare modifier the monitor can trigger on (except Fn) must be
+        // pollable by the watchdog, and the monitor's keycode must be among the
+        // watchdog's — otherwise a recording the monitor starts could never be
+        // watchdog-stopped (or worse, stopped while genuinely held).
+        for hk in [
+            "Control",
+            "LeftControl",
+            "RightControl",
+            "Option",
+            "LeftOption",
+            "RightOption",
+            "Command",
+            "LeftCommand",
+            "RightCommand",
+            "Shift",
+            "LeftShift",
+            "RightShift",
+        ] {
+            assert!(is_bare_modifier(hk), "{hk} should be a bare modifier");
+            let (monitor_kc, _flag) = bare_modifier_keycode_flag(hk).expect(hk);
+            let watchdog_kcs = bare_modifier_keycodes(hk).expect(hk);
+            assert!(
+                watchdog_kcs.contains(&monitor_kc),
+                "{hk}: monitor keycode {monitor_kc} missing from watchdog set {watchdog_kcs:?}"
+            );
+            // Generic names must cover both physical keys (aliasing fix).
+            if !hk.starts_with("Left") && !hk.starts_with("Right") {
+                assert_eq!(watchdog_kcs.len(), 2, "{hk} should cover both sides");
+            }
+        }
+    }
 }

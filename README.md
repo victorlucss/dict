@@ -83,4 +83,4 @@ flag; `auto` lets Whisper detect).
 
 ## License
 
-See the repository for license details.
+[MIT](LICENSE)
