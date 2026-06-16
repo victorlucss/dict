@@ -1,0 +1,20 @@
+# SPIKE ONLY — runs only on the spike branch. Build-only (no release/publish),
+# so it can never trigger a user-facing release. Delete with the branch.
+name: Sherpa xplat spike
+on:
+  push:
+    branches: [spike/sherpa-onnx]
+  workflow_dispatch:
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build sherpa probe
+        working-directory: spike/sherpa-xplat
+        run: cargo build --release

@@ -1,0 +1,14 @@
+# SPIKE ONLY — cross-platform build check for sherpa-rs (branch spike/sherpa-onnx).
+# Standalone crate (not part of src-tauri). Proves `download-binaries` fetches and
+# links prebuilt sherpa-onnx + ONNX Runtime on macOS, Linux, and Windows.
+[package]
+name = "sherpa-xplat"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+sherpa-rs = { version = "0.6.8", default-features = false, features = ["download-binaries"] }
+
+[[bin]]
+name = "probe"
+path = "src/main.rs"
