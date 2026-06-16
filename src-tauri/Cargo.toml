@@ -36,6 +36,14 @@ rubato = "0.16"
 # transcribe f32 samples directly (no subprocess, no disk WAV). Metal GPU added on
 # macOS below.
 whisper-rs = "0.16"
+# Second STT engine: sherpa-onnx (ONNX Runtime) for NVIDIA Parakeet and other
+# non-Whisper models. `download-binaries` fetches prebuilt sherpa-onnx + ONNX
+# Runtime per-platform (no C++ source compile); `tts` is dropped (unused).
+sherpa-rs = { version = "0.6.8", default-features = false, features = ["download-binaries"] }
+# Parakeet models ship as .tar.bz2 bundles (encoder/decoder/joiner .onnx + tokens);
+# decompress + untar in-process when downloading them.
+tar = "0.4"
+bzip2 = "0.5"
 arboard = { version = "3", default-features = false }
 enigo = { version = "0.3", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }

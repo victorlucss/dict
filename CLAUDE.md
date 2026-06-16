@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Dict?
 
-Dict is a cross-platform (macOS, Linux, Windows) menu-bar/tray app that converts voice to text via a global hotkey. It uses Whisper (embedded whisper.cpp via whisper-rs, model kept warm in RAM) as its STT backend on all platforms, with optional LLM post-processing, and pastes the result into whatever app has focus.
+Dict is a cross-platform (macOS, Linux, Windows) menu-bar/tray app that converts voice to text via a global hotkey. It has two selectable STT engines — Whisper (embedded whisper.cpp via whisper-rs, default) and Parakeet (NVIDIA NeMo transducer models via sherpa-onnx/sherpa-rs) — both kept warm in RAM, with optional LLM post-processing, and pastes the result into whatever app has focus.
 
 Built with **Rust + Tauri 2.0** for the backend and vanilla HTML/CSS/JS for the frontend.
 
@@ -91,7 +91,8 @@ Vanilla HTML/CSS/JS with no build step:
 | `lib.rs` | App orchestration, state machine, Tauri commands, tray menu |
 | `settings.rs` | SettingsData, persistence, custom dictionary, snippets, voice commands, history |
 | `audio.rs` | cpal microphone capture, rubato resampling to 16kHz, returns f32 samples for whisper-rs |
-| `whisper.rs` | Embedded whisper.cpp (whisper-rs): loads the GGML model once into a warm WhisperContext, in-process transcription (the sole STT engine) |
+| `whisper.rs` | Embedded whisper.cpp (whisper-rs): loads the GGML model once into a warm WhisperContext, in-process transcription (default STT engine) |
+| `parakeet.rs` | NVIDIA Parakeet / NeMo transducer STT via sherpa-onnx (sherpa-rs): warm in-memory TransducerRecognizer, multilingual auto-detect, selected when `stt_engine = parakeet` |
 | `llm.rs` | LLM post-processing (6 providers: Dict Cloud, OpenAI, Anthropic, OpenRouter, Ollama, LM Studio; correction levels 1-5; tone) |
 | `models.rs` | Whisper model catalog + downloader (in-app model manager) |
 | `text_injector.rs` | Clipboard paste via arboard + enigo, key combo simulation |
@@ -104,7 +105,7 @@ Vanilla HTML/CSS/JS with no build step:
 ### Key Design Decisions
 
 - Tauri 2.0 for cross-platform (macOS, Linux, Windows) with a single Rust codebase — no platform-specific STT, so the build has no Swift/native bridge to compile
-- Whisper (embedded whisper.cpp via whisper-rs; the GGML model is loaded once and kept warm in RAM, Metal-accelerated on Apple Silicon) is the sole STT engine on all platforms
+- Two selectable STT engines (`stt_engine` setting): Whisper (embedded whisper.cpp via whisper-rs, default, GGML model warm in RAM, Metal-accelerated) and Parakeet (NeMo transducer via sherpa-onnx/sherpa-rs, warm recognizer). sherpa-rs uses `download-binaries` (prebuilt sherpa-onnx + ONNX Runtime, no C++ source compile); its dylibs are found at runtime via rpath set in `build.rs` (`@executable_path`/`$ORIGIN`) and bundled into the app. Parakeet models are `.tar.bz2` bundles downloaded + extracted by `models.rs` into `~/.config/dict/models/<name>/`
 - Recording runs while the hotkey is held (push-to-talk) or until toggled off, with a 10-minute safety cap (`audio::MAX_RECORDING_SECS`): the capture callback stops buffering at the cap and a per-recording watchdog thread auto-stops the session. On macOS the watchdog also stops bare-modifier PTT recordings whose Release event was lost (secure-input fields, screen lock, left/right modifier aliasing) by polling `CGEventSourceKeyState`. The tray shows 🔴 while recording
 - `privacy_mode` skips cloud LLM providers (Dict Cloud / OpenAI / Anthropic / OpenRouter) and suppresses history persistence; local providers (Ollama, LM Studio) still run
 - Dict Cloud is managed cleanup via a Convex backend, gated per-user by a `cloud_cleanup` feature flag; the client only shows it as a provider when signed in and the flag is on

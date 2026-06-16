@@ -275,7 +275,7 @@ pub async fn download_whisper_model(
     // Clean up any leftover partial from a previous attempt.
     let _ = std::fs::remove_file(&part_path);
 
-    let result = download_to_part(&app, &name, &url, &part_path).await;
+    let result = download_to_part(&app, "whisper-download-progress", &name, &url, &part_path).await;
 
     match result {
         Ok(()) => {
@@ -310,6 +310,7 @@ pub fn delete_whisper_model(name: String) -> Result<(), String> {
 
 async fn download_to_part(
     app: &tauri::AppHandle,
+    event: &str,
     name: &str,
     url: &str,
     part_path: &std::path::Path,
@@ -338,7 +339,7 @@ async fn download_to_part(
     let mut stream = resp.bytes_stream();
 
     // Emit an initial 0% event.
-    emit_progress(app, name, 0, total);
+    emit_progress(app, event, name, 0, total);
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| format!("Download error: {}", e))?;
@@ -350,7 +351,7 @@ async fn download_to_part(
         if last_emit.elapsed() >= Duration::from_millis(200)
             || downloaded - last_emit_bytes >= 1_000_000
         {
-            emit_progress(app, name, downloaded, total);
+            emit_progress(app, event, name, downloaded, total);
             last_emit = Instant::now();
             last_emit_bytes = downloaded;
         }
@@ -359,18 +360,170 @@ async fn download_to_part(
     file.flush().map_err(|e| format!("Failed to flush file: {}", e))?;
 
     // Final 100% event.
-    emit_progress(app, name, downloaded, total);
+    emit_progress(app, event, name, downloaded, total);
 
     Ok(())
 }
 
-fn emit_progress(app: &tauri::AppHandle, name: &str, downloaded: u64, total: u64) {
+fn emit_progress(app: &tauri::AppHandle, event: &str, name: &str, downloaded: u64, total: u64) {
     let _ = app.emit(
-        "whisper-download-progress",
+        event,
         serde_json::json!({
             "name": name,
             "downloaded": downloaded,
             "total": total,
         }),
     );
+}
+
+// ─── Parakeet (sherpa-onnx) model catalog ───────────────
+
+/// k2-fsa hosts the sherpa-onnx model bundles on this GitHub release.
+const SHERPA_MODELS_BASE: &str =
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models";
+
+/// Curated Parakeet catalog. `archive` is the tarball basename (also the
+/// directory it extracts to). int8 variants are chosen for size/speed.
+struct ParakeetEntry {
+    /// Stable id stored in settings / used by the UI.
+    id: &'static str,
+    /// Tarball basename = extracted directory name.
+    archive: &'static str,
+    label: &'static str,
+    size: &'static str,
+    languages: &'static str,
+}
+
+const PARAKEET_CATALOG: &[ParakeetEntry] = &[
+    ParakeetEntry {
+        id: "parakeet-tdt-0.6b-v3-int8",
+        archive: "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8",
+        label: "Parakeet TDT v3",
+        size: "464 MB",
+        languages: "25 European languages incl. Portuguese. Punctuation + capitalization.",
+    },
+    ParakeetEntry {
+        id: "parakeet-tdt-0.6b-v2-int8",
+        archive: "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8",
+        label: "Parakeet TDT v2",
+        size: "460 MB",
+        languages: "English only. Punctuation + capitalization.",
+    },
+    ParakeetEntry {
+        id: "parakeet-tdt-ctc-110m-en-int8",
+        archive: "sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8",
+        label: "Parakeet 110M (English)",
+        size: "99 MB",
+        languages: "English only. Lightweight, lower accuracy than 0.6B.",
+    },
+];
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParakeetModelInfo {
+    pub id: String,
+    pub label: String,
+    pub size: String,
+    pub languages: String,
+    pub downloaded: bool,
+    /// Extracted model directory path (this is what settings.parakeet_model_path stores).
+    pub path: String,
+}
+
+fn parakeet_dir(archive: &str) -> PathBuf {
+    models_directory().join(archive)
+}
+
+/// List the curated Parakeet catalog with download status. A model counts as
+/// downloaded only when its extracted directory holds a complete transducer bundle.
+#[tauri::command]
+pub fn list_parakeet_models() -> Vec<ParakeetModelInfo> {
+    PARAKEET_CATALOG
+        .iter()
+        .map(|e| {
+            let dir = parakeet_dir(e.archive);
+            ParakeetModelInfo {
+                id: e.id.to_string(),
+                label: e.label.to_string(),
+                size: e.size.to_string(),
+                languages: e.languages.to_string(),
+                downloaded: crate::parakeet::is_complete_model_dir(&dir),
+                path: dir.to_string_lossy().to_string(),
+            }
+        })
+        .collect()
+}
+
+/// Download + extract a Parakeet model bundle. Streams the `.tar.bz2` to a temp
+/// file (emitting `parakeet-download-progress`), then decompresses + untars it
+/// into the models directory. Returns the extracted model directory path.
+#[tauri::command]
+pub async fn download_parakeet_model(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<String, String> {
+    let entry = PARAKEET_CATALOG
+        .iter()
+        .find(|e| e.id == id)
+        .ok_or_else(|| format!("Unknown Parakeet model: {}", id))?;
+
+    let dir = models_directory();
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create models dir: {}", e))?;
+
+    let url = format!("{}/{}.tar.bz2", SHERPA_MODELS_BASE, entry.archive);
+    let part_path = dir.join(format!("{}.tar.bz2.part", entry.archive));
+    let model_dir = parakeet_dir(entry.archive);
+
+    // Clean any leftovers from a previous attempt.
+    let _ = std::fs::remove_file(&part_path);
+
+    download_to_part(&app, "parakeet-download-progress", &id, &url, &part_path).await?;
+
+    // Decompress + untar. Done on a blocking thread — it's CPU/IO heavy and we're
+    // in an async command. Remove a stale model dir first so extraction is clean.
+    let _ = std::fs::remove_dir_all(&model_dir);
+    let part_for_extract = part_path.clone();
+    let dest = dir.clone();
+    let extract = tokio::task::spawn_blocking(move || extract_tar_bz2(&part_for_extract, &dest))
+        .await
+        .map_err(|e| format!("Extraction task failed: {}", e))?;
+    let _ = std::fs::remove_file(&part_path);
+    extract?;
+
+    if !crate::parakeet::is_complete_model_dir(&model_dir) {
+        let _ = std::fs::remove_dir_all(&model_dir);
+        return Err("Downloaded model is incomplete after extraction".to_string());
+    }
+
+    Ok(model_dir.to_string_lossy().to_string())
+}
+
+/// Delete a downloaded Parakeet model directory. No-op if already gone.
+#[tauri::command]
+pub fn delete_parakeet_model(id: String) -> Result<(), String> {
+    let entry = PARAKEET_CATALOG
+        .iter()
+        .find(|e| e.id == id)
+        .ok_or_else(|| format!("Unknown Parakeet model: {}", id))?;
+    let dir = parakeet_dir(entry.archive);
+    // Drop the warm recognizer in case this was the active model, so the next
+    // transcription reloads instead of using a freed model.
+    crate::parakeet::reset_warm_model();
+    match std::fs::remove_dir_all(&dir) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("Failed to delete model: {}", e)),
+    }
+}
+
+/// Decompress a `.tar.bz2` and unpack it into `dest_dir` (creates a top-level
+/// directory named after the archive).
+fn extract_tar_bz2(archive: &std::path::Path, dest_dir: &std::path::Path) -> Result<(), String> {
+    let file = std::fs::File::open(archive)
+        .map_err(|e| format!("Failed to open archive: {}", e))?;
+    let decompressor = bzip2::read::BzDecoder::new(std::io::BufReader::new(file));
+    let mut tar = tar::Archive::new(decompressor);
+    tar.unpack(dest_dir)
+        .map_err(|e| format!("Failed to extract model: {}", e))
 }

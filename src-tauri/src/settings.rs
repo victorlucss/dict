@@ -39,6 +39,15 @@ pub enum OverlayPosition {
     Bottom,
 }
 
+/// Which speech-to-text engine to use. Whisper is the default (embedded
+/// whisper.cpp); Parakeet runs NeMo transducer models via sherpa-onnx.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum SttEngine {
+    Whisper,
+    Parakeet,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum LLMProvider {
@@ -58,10 +67,19 @@ pub enum LLMProvider {
 pub struct SettingsData {
     #[serde(default = "default_hotkey_mode")]
     pub hotkey_mode: HotkeyMode,
+    /// Active STT engine. Defaults to Whisper so existing configs are unchanged.
+    /// Tolerant: an unknown engine value (e.g. from a newer build, or a typo)
+    /// falls back to Whisper rather than failing the whole config load.
+    #[serde(default = "default_stt_engine", deserialize_with = "deserialize_stt_engine")]
+    pub stt_engine: SttEngine,
     #[serde(default)]
     pub whisper_model_path: String,
     #[serde(default = "default_whisper_language")]
     pub whisper_language: String,
+    /// Directory of the selected Parakeet model bundle (encoder/decoder/joiner
+    /// .onnx + tokens.txt). Empty until a Parakeet model is downloaded + chosen.
+    #[serde(default)]
+    pub parakeet_model_path: String,
     #[serde(default)]
     pub llm_enabled: bool,
     #[serde(default = "default_llm_endpoint")]
@@ -104,6 +122,24 @@ pub struct SettingsData {
 
 fn default_hotkey_mode() -> HotkeyMode {
     HotkeyMode::PushToTalk
+}
+
+fn default_stt_engine() -> SttEngine {
+    SttEngine::Whisper
+}
+
+/// Deserialize `stt_engine` tolerantly: a missing field uses the default, and a
+/// present-but-unknown value (or a non-string) falls back to Whisper instead of
+/// erroring out the entire `SettingsData` parse.
+fn deserialize_stt_engine<'de, D>(deserializer: D) -> Result<SttEngine, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = serde_json::Value::deserialize(deserializer)?;
+    Ok(match v.as_str() {
+        Some("parakeet") => SttEngine::Parakeet,
+        _ => SttEngine::Whisper,
+    })
 }
 
 fn default_hotkey() -> String {
@@ -155,8 +191,10 @@ impl Default for SettingsData {
     fn default() -> Self {
         Self {
             hotkey_mode: default_hotkey_mode(),
+            stt_engine: default_stt_engine(),
             whisper_model_path: String::new(),
             whisper_language: default_whisper_language(),
+            parakeet_model_path: String::new(),
             llm_enabled: false,
             llm_endpoint: default_llm_endpoint(),
             llm_model: default_llm_model(),
@@ -565,5 +603,7 @@ mod tests {
         assert_eq!(parsed.llm_accuracy, 3);
         assert_eq!(parsed.flow_mode, false);
         assert!(parsed.audio_input_device.is_none());
+        // Unknown engine value falls back to the default rather than failing.
+        assert_eq!(parsed.stt_engine, SttEngine::Whisper);
     }
 }

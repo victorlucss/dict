@@ -4,6 +4,7 @@ mod hotkey;
 mod llm;
 mod logging;
 mod models;
+mod parakeet;
 mod settings;
 mod text_injector;
 mod update_checker;
@@ -898,18 +899,32 @@ fn stop_recording(app: &AppHandle) {
             let app_handle = app.clone();
             std::thread::spawn(move || {
                 let state = app_handle.state::<AppState>();
-                let (model_path, language) = {
+                let (engine, whisper_path, language, parakeet_path) = {
                     let s = state.settings.lock().unwrap();
                     (
+                        s.data.stt_engine.clone(),
                         s.data.whisper_model_path.clone(),
                         s.data.whisper_language.clone(),
+                        s.data.parakeet_model_path.clone(),
                     )
                 };
 
-                match whisper::transcribe(&model_path, &samples, &language) {
+                // Dispatch to the selected STT engine. Both take the same 16kHz
+                // mono f32 samples; Parakeet (multilingual, auto-detect) needs no
+                // language flag.
+                let result = match &engine {
+                    settings::SttEngine::Whisper => {
+                        whisper::transcribe(&whisper_path, &samples, &language)
+                    }
+                    settings::SttEngine::Parakeet => {
+                        parakeet::transcribe(&parakeet_path, &samples)
+                    }
+                };
+
+                match result {
                     Ok(text) => handle_transcription(&app_handle, &text),
                     Err(e) => {
-                        tracing::error!("Whisper error: {}", e);
+                        tracing::error!("Transcription error ({:?}): {}", engine, e);
                         hide_overlay(&app_handle);
                     }
                 }
@@ -1388,6 +1403,9 @@ pub fn run() {
             models::list_whisper_models,
             models::download_whisper_model,
             models::delete_whisper_model,
+            models::list_parakeet_models,
+            models::download_parakeet_model,
+            models::delete_parakeet_model,
         ])
         .setup(move |app| {
             // Request all permissions on macOS at startup

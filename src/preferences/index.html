@@ -187,6 +187,18 @@
             <!-- Speech Section -->
             <div class="section hidden" id="section-speech">
                 <div class="card">
+                    <div class="setting-row" id="sttEngineRow">
+                        <div class="setting-info">
+                            <div class="setting-title">Engine</div>
+                            <div class="setting-desc">Which speech-to-text engine turns your voice into text. Whisper covers 90+ languages; Parakeet is faster and more accurate on its supported languages.</div>
+                        </div>
+                        <div class="setting-control">
+                            <select id="sttEngine">
+                                <option value="whisper" data-desc="90+ languages. Embedded, warm in memory.">Whisper</option>
+                                <option value="parakeet" data-desc="NVIDIA Parakeet via sherpa-onnx. Faster, very accurate.">Parakeet</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="setting-row setting-row-stacked" id="whisperModelRow">
                         <div class="setting-info">
                             <div class="setting-title">Whisper Model</div>
@@ -212,6 +224,33 @@
                                 <button type="button" class="btn-secondary danger hidden" id="whisperDeleteBtn">Delete</button>
                             </div>
                             <div class="control-error hidden" id="whisperError"></div>
+                        </div>
+                    </div>
+                    <div class="setting-row setting-row-stacked hidden" id="parakeetModelRow">
+                        <div class="setting-info">
+                            <div class="setting-title">Parakeet Model</div>
+                            <div class="setting-desc" id="parakeetModelDesc">NVIDIA Parakeet models run via sherpa-onnx. v3 covers 25 European languages including Portuguese.</div>
+                        </div>
+                        <div class="setting-control setting-control-full whisper-model-control">
+                            <!-- Hidden field collectSettings() reads: extracted model directory path. -->
+                            <input type="hidden" id="parakeetModelPath">
+                            <select id="parakeetModelSelect"></select>
+                            <div class="whisper-model-status" id="parakeetModelStatus">
+                                <span class="whisper-ready hidden" id="parakeetReady">
+                                    <span class="status-dot ready" aria-hidden="true"></span> Ready
+                                </span>
+                                <button type="button" class="btn-secondary hidden" id="parakeetDownloadBtn">
+                                    <span class="btn-ring hidden" id="parakeetDownloadRing" aria-hidden="true">
+                                        <svg viewBox="0 0 20 20" width="14" height="14">
+                                            <circle class="btn-ring-track" cx="10" cy="10" r="8"/>
+                                            <circle class="btn-ring-fill" id="parakeetDownloadRingFill" cx="10" cy="10" r="8"/>
+                                        </svg>
+                                    </span>
+                                    <span class="btn-label" id="parakeetDownloadLabel">Download</span>
+                                </button>
+                                <button type="button" class="btn-secondary danger hidden" id="parakeetDeleteBtn">Delete</button>
+                            </div>
+                            <div class="control-error hidden" id="parakeetError"></div>
                         </div>
                     </div>
                     <div class="setting-row" id="micDeviceRow">

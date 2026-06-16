@@ -353,7 +353,7 @@ document.querySelectorAll('.sidebar-btn').forEach(btn => {
 
         // Lazy-load each section's data when it is opened
         if (section === 'account') updateDictCloudAccount();
-        if (section === 'speech') { refreshAudioDevices(); refreshWhisperModels(); }
+        if (section === 'speech') { refreshAudioDevices(); refreshWhisperModels(); refreshParakeetModels(); }
         if (section === 'llm') refreshModels();
         if (section === 'history') loadHistory();
         if (section === 'dictionary') loadDictionary();
@@ -837,8 +837,10 @@ function collectSettings() {
     return {
         hotkey: hotkeyAccelerator,
         hotkeyMode: document.getElementById('hotkeyMode').value,
+        sttEngine: document.getElementById('sttEngine').value,
         whisperModelPath: document.getElementById('whisperModelPath').value,
         whisperLanguage: document.getElementById('language').value,
+        parakeetModelPath: document.getElementById('parakeetModelPath').value,
         llmEnabled: document.getElementById('llmEnabled').checked,
         llmEndpoint: document.getElementById('llmEndpoint').value,
         llmModel: document.getElementById('llmModel').value,
@@ -890,7 +892,7 @@ async function init() {
     loadValues(currentSettings);
     // Enhance the native selects with custom Codex-style dropdowns. Done after
     // loadValues so each select already reflects the saved value when built.
-    ['hotkeyMode', 'language', 'llmProvider', 'llmModel', 'overlayPosition', 'audioDevice', 'whisperModelSelect']
+    ['hotkeyMode', 'language', 'llmProvider', 'llmModel', 'overlayPosition', 'audioDevice', 'whisperModelSelect', 'sttEngine', 'parakeetModelSelect']
         .forEach(id => enhanceSelect(document.getElementById(id)));
     updateProviderFields();
     updateDictCloudAccount();
@@ -902,6 +904,10 @@ async function init() {
     setupWhisperModelManager();
     // Populate the Whisper catalog and preselect the saved model.
     refreshWhisperModels();
+    // Same for the Parakeet engine: engine selector + model manager.
+    setupEngineSelector();
+    setupParakeetModelManager();
+    refreshParakeetModels();
     // Populate the mic dropdown and select the saved device up front so the
     // selection is correct even before the Speech section is opened.
     await refreshAudioDevices();
@@ -928,6 +934,12 @@ function loadValues(s) {
 
     // Hidden field; refreshWhisperModels() preselects by matching this path.
     document.getElementById('whisperModelPath').value = s.whisperModelPath || '';
+
+    // STT engine + Parakeet model path. applyEngineVisibility() shows the right
+    // model manager; refreshParakeetModels() preselects by matching this path.
+    document.getElementById('sttEngine').value = s.sttEngine || 'whisper';
+    document.getElementById('parakeetModelPath').value = s.parakeetModelPath || '';
+    applyEngineVisibility();
 
     document.getElementById('llmEnabled').checked = s.llmEnabled;
     setAccuracy(s.llmAccuracy);
@@ -1345,6 +1357,238 @@ function setupWhisperModelManager() {
         const p = event.payload || {};
         if (!downloadingModel || p.name !== downloadingModel) return;
         setWhisperProgress(p.downloaded || 0, p.total || 0);
+    }).catch(console.error);
+}
+
+// ----- STT engine selector + Parakeet model manager -----------------------
+// Mirrors the Whisper model manager above, backed by `list_parakeet_models` /
+// `download_parakeet_model` / `delete_parakeet_model`. Parakeet model objects are
+// { id, label, size, languages, downloaded, path }; `path` is the extracted model
+// directory, mirrored into the hidden #parakeetModelPath that collectSettings reads.
+
+// Show the model manager (Whisper or Parakeet) that matches the selected engine.
+function applyEngineVisibility() {
+    const engine = document.getElementById('sttEngine')?.value || 'whisper';
+    document.getElementById('whisperModelRow')?.classList.toggle('hidden', engine !== 'whisper');
+    document.getElementById('parakeetModelRow')?.classList.toggle('hidden', engine !== 'parakeet');
+}
+
+function setupEngineSelector() {
+    document.getElementById('sttEngine')?.addEventListener('change', () => {
+        applyEngineVisibility();
+        // Refresh whichever manager just became visible so its status is current.
+        const engine = document.getElementById('sttEngine').value;
+        if (engine === 'parakeet') refreshParakeetModels(); else refreshWhisperModels();
+        autoSave();
+    });
+}
+
+let parakeetModels = [];          // [{ id, label, size, languages, downloaded, path }]
+let downloadingParakeet = null;   // id of the model currently downloading, or null
+
+function rebuildParakeetOptions(selectedId) {
+    const select = document.getElementById('parakeetModelSelect');
+    if (!select) return;
+    select.innerHTML = '';
+    parakeetModels.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.label;
+        const size = whisperModelSizeLabel(m);
+        const status = m.downloaded ? 'Ready' : 'Not downloaded';
+        opt.dataset.desc = size ? `${size} · ${status}` : status;
+        opt.dataset.icon = m.downloaded ? '●' : '○';
+        select.appendChild(opt);
+    });
+    if (selectedId != null && parakeetModels.some(m => m.id === selectedId)) {
+        select.value = selectedId;
+    }
+    rebuildCustomSelect(select);
+}
+
+function pickInitialParakeetModel() {
+    const savedPath = document.getElementById('parakeetModelPath').value
+        || currentSettings?.parakeetModelPath || '';
+    if (savedPath) {
+        const byPath = parakeetModels.find(m => m.path && m.path === savedPath);
+        if (byPath) return byPath;
+    }
+    const firstDownloaded = parakeetModels.find(m => m.downloaded);
+    if (firstDownloaded) return firstDownloaded;
+    return parakeetModels[0] || null;
+}
+
+function selectedParakeetModel() {
+    const id = document.getElementById('parakeetModelSelect').value;
+    return parakeetModels.find(m => m.id === id) || null;
+}
+
+function updateParakeetModelUI() {
+    const ready = document.getElementById('parakeetReady');
+    const dlBtn = document.getElementById('parakeetDownloadBtn');
+    const dlLabel = document.getElementById('parakeetDownloadLabel');
+    const delBtn = document.getElementById('parakeetDeleteBtn');
+    const pathInput = document.getElementById('parakeetModelPath');
+    const desc = document.getElementById('parakeetModelDesc');
+    const model = selectedParakeetModel();
+
+    const isDownloadingThis = model && downloadingParakeet === model.id;
+    if (desc && model && model.languages) desc.textContent = model.languages;
+
+    if (!model) {
+        ready.classList.add('hidden');
+        dlBtn.classList.add('hidden');
+        resetParakeetDownloadButton();
+        delBtn.classList.add('hidden');
+        return;
+    }
+
+    if (model.downloaded) {
+        if (model.path) pathInput.value = model.path;
+        ready.classList.remove('hidden');
+        resetParakeetDownloadButton();
+        dlBtn.classList.add('hidden');
+        delBtn.disabled = false;
+        delBtn.classList.toggle('hidden', isDownloadingThis);
+    } else {
+        ready.classList.add('hidden');
+        delBtn.classList.add('hidden');
+        if (isDownloadingThis) {
+            dlBtn.classList.remove('hidden');
+        } else {
+            resetParakeetDownloadButton();
+            const size = whisperModelSizeLabel(model);
+            dlLabel.textContent = size ? `Download (${size})` : 'Download';
+            dlBtn.disabled = false;
+            dlBtn.classList.remove('hidden');
+        }
+    }
+}
+
+function showParakeetError(msg) {
+    const el = document.getElementById('parakeetError');
+    if (!el) return;
+    if (msg) { el.textContent = msg; el.classList.remove('hidden'); }
+    else { el.textContent = ''; el.classList.add('hidden'); }
+}
+
+function setParakeetProgress(downloaded, total) {
+    const btn = document.getElementById('parakeetDownloadBtn');
+    const ring = document.getElementById('parakeetDownloadRing');
+    const fill = document.getElementById('parakeetDownloadRingFill');
+    const label = document.getElementById('parakeetDownloadLabel');
+    if (!btn) return;
+
+    btn.classList.add('downloading');
+    btn.disabled = true;
+    btn.classList.remove('hidden');
+    ring.classList.remove('hidden');
+    fill.style.strokeDasharray = RING_CIRCUMFERENCE;
+
+    if (total && total > 0) {
+        const pct = Math.max(0, Math.min(100, Math.round((downloaded / total) * 100)));
+        ring.classList.remove('indeterminate');
+        fill.style.strokeDashoffset = RING_CIRCUMFERENCE * (1 - pct / 100);
+        label.textContent = pct + '%';
+    } else {
+        ring.classList.add('indeterminate');
+        fill.style.strokeDashoffset = RING_CIRCUMFERENCE * 0.75;
+        label.textContent = 'Downloading…';
+    }
+}
+
+function resetParakeetDownloadButton() {
+    const btn = document.getElementById('parakeetDownloadBtn');
+    const ring = document.getElementById('parakeetDownloadRing');
+    if (!btn) return;
+    btn.classList.remove('downloading');
+    ring.classList.add('hidden', 'indeterminate');
+    ring.classList.remove('indeterminate');
+}
+
+async function refreshParakeetModels() {
+    const select = document.getElementById('parakeetModelSelect');
+    if (!select) return;
+    const prev = select.value;
+    try {
+        parakeetModels = (await invoke('list_parakeet_models')) || [];
+    } catch (e) {
+        console.error('Failed to list Parakeet models:', e);
+        parakeetModels = [];
+    }
+    let selectId = prev && parakeetModels.some(m => m.id === prev) ? prev : null;
+    if (!selectId) {
+        const initial = pickInitialParakeetModel();
+        selectId = initial ? initial.id : null;
+    }
+    rebuildParakeetOptions(selectId);
+    updateParakeetModelUI();
+}
+
+async function downloadSelectedParakeetModel() {
+    const model = selectedParakeetModel();
+    if (!model || model.downloaded || downloadingParakeet) return;
+
+    showParakeetError(null);
+    downloadingParakeet = model.id;
+    setParakeetProgress(0, 0);
+
+    try {
+        const path = await invoke('download_parakeet_model', { id: model.id });
+        model.downloaded = true;
+        if (path) {
+            model.path = path;
+            document.getElementById('parakeetModelPath').value = path;
+        }
+        downloadingParakeet = null;
+        await refreshParakeetModels();
+        autoSave();
+    } catch (e) {
+        console.error('Failed to download Parakeet model:', e);
+        downloadingParakeet = null;
+        showParakeetError("Download didn't finish. " + (typeof e === 'string' ? e : (e?.message || 'something went wrong. Try again.')));
+        resetParakeetDownloadButton();
+        updateParakeetModelUI();
+    }
+}
+
+async function deleteSelectedParakeetModel() {
+    const model = selectedParakeetModel();
+    if (!model || !model.downloaded || downloadingParakeet) return;
+
+    showParakeetError(null);
+    const delBtn = document.getElementById('parakeetDeleteBtn');
+    delBtn.disabled = true;
+    try {
+        await invoke('delete_parakeet_model', { id: model.id });
+        const pathInput = document.getElementById('parakeetModelPath');
+        if (pathInput.value === model.path) pathInput.value = '';
+        parakeetModels = (await invoke('list_parakeet_models')) || [];
+        const stillDownloaded = parakeetModels.find(m => m.downloaded);
+        rebuildParakeetOptions(stillDownloaded ? stillDownloaded.id : model.id);
+        updateParakeetModelUI();
+        autoSave();
+    } catch (e) {
+        console.error('Failed to delete Parakeet model:', e);
+        showParakeetError("Couldn't delete that model. " + (typeof e === 'string' ? e : (e?.message || 'something went wrong. Try again.')));
+        delBtn.disabled = false;
+        updateParakeetModelUI();
+    }
+}
+
+function setupParakeetModelManager() {
+    document.getElementById('parakeetModelSelect')?.addEventListener('change', () => {
+        showParakeetError(null);
+        updateParakeetModelUI();
+        autoSave();
+    });
+    document.getElementById('parakeetDownloadBtn')?.addEventListener('click', downloadSelectedParakeetModel);
+    document.getElementById('parakeetDeleteBtn')?.addEventListener('click', deleteSelectedParakeetModel);
+
+    listen('parakeet-download-progress', (event) => {
+        const p = event.payload || {};
+        if (!downloadingParakeet || p.name !== downloadingParakeet) return;
+        setParakeetProgress(p.downloaded || 0, p.total || 0);
     }).catch(console.error);
 }
 
