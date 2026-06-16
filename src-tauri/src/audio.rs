@@ -1,6 +1,7 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Stream};
 use rubato::{FftFixedIn, Resampler};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Audio device info returned to the frontend
@@ -82,11 +83,40 @@ struct RecordingState {
     capped: bool,
 }
 
+impl RecordingState {
+    /// Append captured mono samples, never growing past `max_samples`. Logs the
+    /// cap once. Extracted from the capture callback so it's unit-testable
+    /// without a real audio device.
+    fn push_samples(&mut self, mono: &[f32]) {
+        let room = self.max_samples.saturating_sub(self.samples.len());
+        if room == 0 {
+            if !self.capped {
+                self.capped = true;
+                tracing::warn!(
+                    "Recording hit the {}s safety cap; dropping further audio",
+                    MAX_RECORDING_SECS
+                );
+            }
+        } else {
+            let take = mono.len().min(room);
+            self.samples.extend_from_slice(&mono[..take]);
+        }
+    }
+}
+
 /// Active audio capture session
 pub struct AudioCapture {
     stream: SendStream,
     state: Arc<Mutex<RecordingState>>,
     level_callback: Arc<Mutex<Option<Box<dyn Fn(f32) + Send + 'static>>>>,
+    /// Gate the capture callback reads before doing anything. Dropping a cpal
+    /// input stream does NOT reliably tear down the CoreAudio unit on macOS —
+    /// the callback can keep firing after `stop()`. Without this gate a "stopped"
+    /// stream keeps appending to the shared buffer (and emitting level events)
+    /// forever; with several recordings' worth leaked, the buffer fills at N×
+    /// realtime and exhausts memory overnight. `stop()` flips this to false so
+    /// any still-living callback becomes a no-op.
+    active: Arc<AtomicBool>,
 }
 
 impl AudioCapture {
@@ -101,6 +131,7 @@ impl AudioCapture {
                 capped: false,
             })),
             level_callback: Arc::new(Mutex::new(None)),
+            active: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -110,6 +141,10 @@ impl AudioCapture {
 
     /// Start recording from the microphone
     pub fn start(&mut self, device_id: Option<&str>) -> Result<(), String> {
+        // Tear down any stream still held from a prior session before building a
+        // new one, so we never leak a reference to a running CoreAudio unit.
+        self.stop_stream();
+
         let device = get_input_device(device_id).ok_or("No audio input device found")?;
         let config = device
             .default_input_config()
@@ -136,11 +171,18 @@ impl AudioCapture {
 
         let state = self.state.clone();
         let level_cb = self.level_callback.clone();
+        let active = self.active.clone();
+        // Arm the gate before the stream starts producing callbacks.
+        self.active.store(true, Ordering::SeqCst);
 
         let stream = device
             .build_input_stream(
                 &config.into(),
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    // A stopped (or leaked) stream's callback must do nothing.
+                    if !active.load(Ordering::Relaxed) {
+                        return;
+                    }
                     // Collect samples (mono-mix if multi-channel)
                     let ch = channels as usize;
                     let mono_samples: Vec<f32> = if ch == 1 {
@@ -181,19 +223,7 @@ impl AudioCapture {
                     }
 
                     if let Ok(mut s) = state.lock() {
-                        let room = s.max_samples.saturating_sub(s.samples.len());
-                        if room == 0 {
-                            if !s.capped {
-                                s.capped = true;
-                                tracing::warn!(
-                                    "Recording hit the {}s safety cap; dropping further audio",
-                                    MAX_RECORDING_SECS
-                                );
-                            }
-                        } else {
-                            let take = mono_samples.len().min(room);
-                            s.samples.extend_from_slice(&mono_samples[..take]);
-                        }
+                        s.push_samples(&mono_samples);
                     }
                 },
                 move |err| {
@@ -212,10 +242,21 @@ impl AudioCapture {
         Ok(())
     }
 
+    /// Disarm the gate, explicitly pause the stream (CoreAudio's unit is NOT
+    /// reliably stopped by dropping the `Stream` on macOS), then drop it. Safe to
+    /// call with no active stream.
+    fn stop_stream(&mut self) {
+        self.active.store(false, Ordering::SeqCst);
+        if let Some(stream) = self.stream.0.take() {
+            let _ = stream.pause();
+            // `stream` dropped here, after it was explicitly paused.
+        }
+    }
+
     /// Stop recording and return the captured audio as 16 kHz mono f32 samples,
     /// ready to feed straight into whisper-rs (no disk round-trip).
     pub fn stop(&mut self) -> Result<Vec<f32>, String> {
-        self.stream = SendStream(None); // Drop the stream to stop recording
+        self.stop_stream();
         tracing::info!("Audio capture stopped");
 
         let (samples, source_rate, _channels) = {
@@ -305,3 +346,44 @@ fn resample(samples: &[f32], source_rate: u32, target_rate: u32) -> Result<Vec<f
     Ok(output)
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state(max_samples: usize) -> RecordingState {
+        RecordingState {
+            samples: Vec::new(),
+            sample_rate: 16000,
+            channels: 1,
+            max_samples,
+            capped: false,
+        }
+    }
+
+    #[test]
+    fn push_samples_appends_below_cap() {
+        let mut s = state(10);
+        s.push_samples(&[0.1, 0.2, 0.3]);
+        assert_eq!(s.samples.len(), 3);
+        assert!(!s.capped);
+    }
+
+    #[test]
+    fn push_samples_never_exceeds_cap_and_flags_when_full() {
+        let mut s = state(4);
+        s.push_samples(&[0.0, 0.1, 0.2]); // 3 -> under cap
+        assert!(!s.capped);
+        s.push_samples(&[0.3, 0.4, 0.5]); // would be 6; clamped to 4
+        assert_eq!(s.samples.len(), 4, "buffer must not grow past the cap");
+
+        // The next push finds no room: it's dropped and the cap is flagged once.
+        s.push_samples(&[0.6, 0.7]);
+        assert_eq!(s.samples.len(), 4, "buffer must not grow once full");
+        assert!(s.capped, "cap flag set when a push finds the buffer full");
+
+        // Still capped, still bounded on subsequent pushes.
+        s.push_samples(&[0.8]);
+        assert_eq!(s.samples.len(), 4);
+    }
+}

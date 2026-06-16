@@ -713,9 +713,13 @@ fn build_tray_menu(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 /// invisible once the display sleeps, so the tray is the glanceable cue that a
 /// recording (including a runaway one) is live. `set_title` shows text next to
 /// the tray icon on macOS; elsewhere only the tooltip applies.
+///
+/// Clear with `Some("")`, NOT `None`: tray-icon's macOS `set_title(None)` is a
+/// no-op (it only updates the button title when `Some`), so passing `None` would
+/// leave the 🔴 on screen forever.
 fn set_tray_recording_indicator(app: &AppHandle, recording: bool) {
     if let Some(tray) = app.tray_by_id("main-tray") {
-        let _ = tray.set_title(if recording { Some("🔴") } else { None::<&str> });
+        let _ = tray.set_title(Some(if recording { "🔴" } else { "" }));
         let _ = tray.set_tooltip(Some(if recording {
             "Dict — recording"
         } else {
