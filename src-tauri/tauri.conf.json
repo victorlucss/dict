@@ -6,8 +6,7 @@
     "frontendDist": "../src",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "",
-    "beforeBuildCommand": "",
-    "beforeBundleCommand": "node scripts/stage-native-libs.mjs"
+    "beforeBuildCommand": ""
   },
   "app": {
     "macOSPrivateApi": true,
@@ -37,8 +36,8 @@
       "minimumSystemVersion": "14.0",
       "entitlements": "Entitlements.plist",
       "frameworks": [
-        "native-libs/libonnxruntime.1.17.1.dylib",
-        "native-libs/libsherpa-onnx-c-api.dylib"
+        "target/release/libonnxruntime.1.17.1.dylib",
+        "target/release/libsherpa-onnx-c-api.dylib"
       ],
       "exceptionDomain": ""
     },
