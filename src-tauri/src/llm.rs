@@ -106,26 +106,26 @@ pub async fn process(
         return text.to_string();
     }
 
-    // Dict Cloud: the managed backend builds the prompt and calls the upstream
+    // MegaBrain Cloud: the managed backend builds the prompt and calls the upstream
     // model, so the client just sends the raw text + context.
     if matches!(settings.llm_provider, LLMProvider::Dictcloud) {
         let client = http_client();
         return match call_dictcloud(client, text, settings, frontmost_app, dictionary_entries).await
         {
             Ok(cleaned) if cleaned.is_empty() => {
-                tracing::warn!("Dict Cloud returned empty response, using raw transcription");
+                tracing::warn!("MegaBrain Cloud returned empty response, using raw transcription");
                 text.to_string()
             }
             Ok(cleaned) if looks_like_meta_reply(&cleaned, text) => {
                 tracing::warn!(
-                    "Dict Cloud returned a meta/refusal reply; using raw transcription. Reply: {:?}",
+                    "MegaBrain Cloud returned a meta/refusal reply; using raw transcription. Reply: {:?}",
                     cleaned
                 );
                 text.to_string()
             }
             Ok(cleaned) => cleaned,
             Err(e) => {
-                tracing::warn!("Dict Cloud request failed: {}. Using raw transcription.", e);
+                tracing::warn!("MegaBrain Cloud request failed: {}. Using raw transcription.", e);
                 text.to_string()
             }
         };
@@ -138,7 +138,7 @@ pub async fn process(
         LLMProvider::Ollama => "http://localhost:11434/v1/chat/completions",
         LLMProvider::Lmstudio => "http://localhost:1234/v1/chat/completions",
         // Handled and returned above; never reaches here.
-        LLMProvider::Dictcloud => unreachable!("Dict Cloud is handled before this match"),
+        LLMProvider::Dictcloud => unreachable!("MegaBrain Cloud is handled before this match"),
     };
 
     let system_prompt = build_system_prompt(settings, frontmost_app, dictionary_entries);
@@ -276,13 +276,13 @@ async fn call_anthropic(
         .ok_or_else(|| format!("Unexpected response format: {}", data))
 }
 
-/// Dict Cloud base URL (Convex HTTP actions). The backend holds the upstream
+/// MegaBrain Cloud base URL (Convex HTTP actions). The backend holds the upstream
 /// provider key, builds the system prompt server-side, and returns
 /// `{ "cleaned": "..." }` from `POST {base}/v1/clean`. Point this at your Convex
 /// deployment's HTTP URL (`https://<name>.convex.site`) or a custom domain.
 pub(crate) const DICT_CLOUD_ENDPOINT: &str = "https://dazzling-cat-37.convex.site";
 
-/// Send raw transcription + context to Dict Cloud and return the cleaned text.
+/// Send raw transcription + context to MegaBrain Cloud and return the cleaned text.
 /// Auth is an anonymous device id (rate-limiting only); no API key is sent.
 async fn call_dictcloud(
     client: &Client,
@@ -292,7 +292,7 @@ async fn call_dictcloud(
     dictionary_entries: &[String],
 ) -> Result<String, String> {
     if settings.dict_cloud_token.is_empty() {
-        return Err("Not signed in to Dict Cloud".to_string());
+        return Err("Not signed in to MegaBrain Cloud".to_string());
     }
 
     let body = json!({
@@ -322,7 +322,7 @@ async fn call_dictcloud(
         .map_err(|e| format!("Failed to parse response: {}", e))?;
 
     if status.as_u16() >= 400 {
-        tracing::error!("Dict Cloud returned {}: {}", status, data);
+        tracing::error!("MegaBrain Cloud returned {}: {}", status, data);
         return Err(format!("HTTP {}", status));
     }
 

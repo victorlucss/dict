@@ -1,5 +1,5 @@
 {
-  "productName": "Dict",
+  "productName": "MegaBrain",
   "version": "0.9.5",
   "identifier": "com.dict.dictation",
   "build": {
@@ -57,7 +57,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc0NDAzQTcxMDg0RUIxQjMKUldTenNVNEljVHBBZEhFOXNsU0hHRmllWDMrdVBqa1BuOWdoQ3pZdHhERmlNQ1Y5QnhYa3JCRUUK",
       "endpoints": [
-        "https://github.com/victorlucss/dict/releases/latest/download/latest.json"
+        "https://github.com/victorlucss/megabrain/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

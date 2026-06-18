@@ -153,7 +153,7 @@ http.route({
           Authorization: `Bearer ${process.env.UPSTREAM_API_KEY}`,
           // OpenRouter attribution headers (ignored by other providers).
           "HTTP-Referer": "https://dict.tianxu.cloud",
-          "X-Title": "Dict",
+          "X-Title": "MegaBrain",
         },
         body: JSON.stringify({
           model,

@@ -157,7 +157,7 @@ pub fn reset_warm_model() {
 mod tests {
     use super::*;
 
-    /// End-to-end check through Dict's own parakeet module. Ignored by default
+    /// End-to-end check through MegaBrain's own parakeet module. Ignored by default
     /// (needs a downloaded model + audio + the sherpa dylibs on the loader path):
     ///   DYLD_LIBRARY_PATH=target/debug \
     ///   DICT_TEST_PARAKEET_DIR=/path/to/model-dir \

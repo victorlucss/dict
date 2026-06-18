@@ -507,7 +507,7 @@ textarea:focus {
     display: none;
 }
 
-/* Dict Cloud account panel */
+/* MegaBrain Cloud account panel */
 .dc-status {
     font-size: 12px;
     color: rgba(235, 235, 245, 0.6);
@@ -518,7 +518,7 @@ textarea:focus {
     display: none;
 }
 
-/* Account (Dict Cloud): keep the sign-in form a sensible width, not full-pane. */
+/* Account (MegaBrain Cloud): keep the sign-in form a sensible width, not full-pane. */
 #section-account .card {
     max-width: 460px;
 }
@@ -528,7 +528,7 @@ textarea:focus {
     margin-top: 16px;
 }
 
-/* Account (Dict Cloud) panel: tight sign-in form. */
+/* Account (MegaBrain Cloud) panel: tight sign-in form. */
 .dc-panel {
     display: flex;
     flex-direction: column;

@@ -1,5 +1,5 @@
 // Mirrors the client's build_system_prompt (src-tauri/src/llm.rs) so cleanup
-// behaves identically whether it runs locally or via Dict Cloud.
+// behaves identically whether it runs locally or via MegaBrain Cloud.
 
 const BASE =
   "You are a voice transcription corrector. Your ONLY job is to clean up speech-to-text output. " +

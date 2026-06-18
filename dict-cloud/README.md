@@ -1,6 +1,6 @@
-# Dict Cloud (Convex backend)
+# MegaBrain Cloud (Convex backend)
 
-Managed cleanup for Dict, with **accounts** and **feature flags**, on
+Managed cleanup for MegaBrain, with **accounts** and **feature flags**, on
 [Convex](https://convex.dev). Users sign in with **email + password**; the
 backend holds the upstream LLM key and cleans transcriptions server-side. Audio
 never reaches this service — only the transcribed text. Full design in
@@ -31,8 +31,8 @@ GET  /v1/flags      Authorization: Bearer <token>
 
 Passwords are stored as a PBKDF2-HMAC-SHA256 hash (100k iterations) + per-user salt.
 
-The Dict client (`src-tauri/src/llm.rs`) calls `/v1/clean` with the stored token
-when the LLM provider is **Dict Cloud**, and `/v1/flags` on launch to gate
+The MegaBrain client (`src-tauri/src/llm.rs`) calls `/v1/clean` with the stored token
+when the LLM provider is **MegaBrain Cloud**, and `/v1/flags` on launch to gate
 experimental features.
 
 ## Setup

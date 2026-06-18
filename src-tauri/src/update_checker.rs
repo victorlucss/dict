@@ -3,7 +3,7 @@ use reqwest::Client;
 use std::time::Duration;
 
 const VERSION_URL: &str = "https://dict.tianxu.cloud/version";
-const DOWNLOAD_URL: &str = "https://dict.studio/Dict.dmg";
+const DOWNLOAD_URL: &str = "https://dict.studio/MegaBrain.dmg";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone, serde::Serialize)]

@@ -1,7 +1,7 @@
 .build/
 .swiftpm/
-Dict.app/
-Dict.dmg
+MegaBrain.app/
+MegaBrain.dmg
 *.xcodeproj
 xcuserdata/
 DerivedData/

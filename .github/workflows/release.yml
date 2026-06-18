@@ -100,7 +100,7 @@ jobs:
         with:
           projectPath: src-tauri
           tagName: v${{ needs.check-version.outputs.version }}
-          releaseName: Dict v${{ needs.check-version.outputs.version }}
+          releaseName: MegaBrain v${{ needs.check-version.outputs.version }}
           releaseBody: "Download the installer for your platform below. Existing installs update automatically."
           # Build into a DRAFT release so it never becomes "latest" with a partial
           # latest.json mid-build. The finalize-manifest job publishes it once the

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dict Preferences</title>
+    <title>MegaBrain Preferences</title>
     <link rel="stylesheet" href="preferences.css">
 </head>
 <body>
@@ -70,9 +70,9 @@
         <main class="content">
             <h1 id="section-title">General</h1>
 
-            <!-- Account Section (Dict Cloud sign-in) -->
+            <!-- Account Section (MegaBrain Cloud sign-in) -->
             <div class="section hidden" id="section-account">
-                <p class="section-desc">Sign in to Dict Cloud to clean up your transcriptions in the cloud. No model, key, or endpoint to set up. Your audio never leaves your Mac. Only the transcribed text is sent.</p>
+                <p class="section-desc">Sign in to MegaBrain Cloud to clean up your transcriptions in the cloud. No model, key, or endpoint to set up. Your audio never leaves your Mac. Only the transcribed text is sent.</p>
                 <div class="card">
                     <!-- Signed-out: sign-in form (sign-up lives in the bottom sheet) -->
                     <div id="dcSignedOut" class="dc-panel">
@@ -144,7 +144,7 @@
                     <div class="setting-row">
                         <div class="setting-info">
                             <div class="setting-title">Language</div>
-                            <div class="setting-desc">The language you'll speak. Not sure? Leave it on Auto-detect and Dict will figure it out from your voice.</div>
+                            <div class="setting-desc">The language you'll speak. Not sure? Leave it on Auto-detect and MegaBrain will figure it out from your voice.</div>
                         </div>
                         <div class="setting-control">
                             <select id="language">
@@ -256,7 +256,7 @@
                     <div class="setting-row" id="micDeviceRow">
                         <div class="setting-info">
                             <div class="setting-title">Microphone</div>
-                            <div class="setting-desc">Which mic Dict listens to. System Default follows your macOS sound settings.</div>
+                            <div class="setting-desc">Which mic MegaBrain listens to. System Default follows your macOS sound settings.</div>
                         </div>
                         <div class="setting-control">
                             <select id="audioDevice">
@@ -317,7 +317,7 @@
                         </div>
                         <div class="setting-control">
                             <select id="llmProvider">
-                                <option value="dictcloud" data-desc="Managed. No setup or API key">Dict Cloud</option>
+                                <option value="dictcloud" data-desc="Managed. No setup or API key">MegaBrain Cloud</option>
                                 <option value="openai" data-desc="Cloud. GPT models from OpenAI">OpenAI</option>
                                 <option value="anthropic" data-desc="Cloud. Claude models from Anthropic">Anthropic</option>
                                 <option value="openrouter" data-desc="Cloud. Lots of models in one place">OpenRouter</option>
@@ -405,7 +405,7 @@
 
             <!-- Dictionary Section -->
             <div class="section hidden" id="section-dictionary">
-                <p class="section-desc">Add words Dict tends to miss, like names, jargon, and acronyms, so it spells them right.</p>
+                <p class="section-desc">Add words MegaBrain tends to miss, like names, jargon, and acronyms, so it spells them right.</p>
                 <div class="card">
                     <div class="add-row">
                         <input type="text" id="dictionaryInput" placeholder="Add a word…">
@@ -417,7 +417,7 @@
 
             <!-- Snippets Section -->
             <div class="section hidden" id="section-snippets">
-                <p class="section-desc">Say a short trigger and Dict types out the full text, like a signature or address.</p>
+                <p class="section-desc">Say a short trigger and MegaBrain types out the full text, like a signature or address.</p>
                 <div class="card">
                     <div class="add-row">
                         <input type="text" id="snippetTriggerInput" placeholder="Trigger">

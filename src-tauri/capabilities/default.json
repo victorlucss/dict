@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Core permissions for Dict windows: drag-to-move, close, focus, and JS event listening.",
+  "description": "Core permissions for MegaBrain windows: drag-to-move, close, focus, and JS event listening.",
   "windows": ["*"],
   "permissions": [
     "core:default",

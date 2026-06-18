@@ -6,12 +6,12 @@ https://github.com/user-attachments/assets/02097d43-e2ea-41cf-98a9-8907b6242e0e
 
 <div align="center">
 
-# Dict
+# MegaBrain
 
-**Talk instead of typing.** Dict is a cross-platform menu-bar / tray app that turns
+**Talk instead of typing.** MegaBrain is a cross-platform menu-bar / tray app that turns
 your voice into clean text anywhere, with one hotkey.
 
-[dict.studio](https://dict.studio) · [Download](https://github.com/victorlucss/dict/releases/latest) · [Changelog](https://dict.studio/changelog.html) · [Config reference](CONFIG.md)
+[dict.studio](https://dict.studio) · [Download](https://github.com/victorlucss/megabrain/releases/latest) · [Changelog](https://dict.studio/changelog.html) · [Config reference](CONFIG.md)
 
 </div>
 
@@ -24,7 +24,7 @@ Runs on **macOS, Linux, and Windows**.
 ## Features
 
 - **Local transcription** — Whisper (embedded whisper.cpp + a GGML model) runs on-device. Your audio never leaves your machine.
-- **Optional cleanup** — fix grammar and drop fillers via Ollama, LM Studio, OpenAI, Anthropic, OpenRouter, or managed **Dict Cloud**. Five correction levels and a tone setting.
+- **Optional cleanup** — fix grammar and drop fillers via Ollama, LM Studio, OpenAI, Anthropic, OpenRouter, or managed **MegaBrain Cloud**. Five correction levels and a tone setting.
 - **Works everywhere you type** — pastes into any app via the clipboard.
 - **Voice snippets** — say a trigger, get a full expansion.
 - **Voice commands** — map spoken phrases to keyboard shortcuts.
@@ -35,7 +35,7 @@ Runs on **macOS, Linux, and Windows**.
 ## Install
 
 Download the installer for your platform from the
-[latest release](https://github.com/victorlucss/dict/releases/latest), or grab it from
+[latest release](https://github.com/victorlucss/megabrain/releases/latest), or grab it from
 [dict.studio](https://dict.studio). Existing installs update themselves over the air.
 
 Whisper is built in (whisper.cpp is embedded, Metal-accelerated on Apple Silicon),
@@ -74,7 +74,7 @@ every config key.
 - Microphone permission (prompted automatically)
 - Accessibility permission on macOS (for pasting into other apps)
 - A GGML model (downloaded in-app; whisper.cpp is embedded, no separate install)
-- An OpenAI-compatible endpoint or a Dict Cloud account if you enable LLM cleanup
+- An OpenAI-compatible endpoint or a MegaBrain Cloud account if you enable LLM cleanup
 
 ## Languages
 

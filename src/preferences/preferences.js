@@ -395,7 +395,7 @@ document.querySelectorAll('#accuracyCards .tone-card').forEach(card => {
 // Provider changes
 document.getElementById('llmProvider').addEventListener('change', updateProviderFields);
 
-// ----- Dict Cloud account (email one-time-code sign-in) -------------------
+// ----- MegaBrain Cloud account (email one-time-code sign-in) --------------
 function dcShowError(msg) {
     const el = document.getElementById('dcError');
     el.textContent = msg || '';
@@ -408,14 +408,14 @@ function dcShowStatus(msg) {
     el.classList.toggle('hidden', !msg);
 }
 
-// Set when we fall the provider back off Dict Cloud, so init can persist the
+// Set when we fall the provider back off MegaBrain Cloud, so init can persist the
 // correction once all fields are loaded (autoSave is gated until then).
 let providerCorrectionPending = false;
 
-// Dict Cloud is only a valid provider when the user is signed in AND has the
+// MegaBrain Cloud is only a valid provider when the user is signed in AND has the
 // cloud_cleanup flag. Show the option only then; otherwise remove it, and if it
 // was the selected provider, fall back to the local default so the backend never
-// tries an unavailable Dict Cloud.
+// tries an unavailable MegaBrain Cloud.
 function setDictCloudProviderAvailable(available) {
     const sel = document.getElementById('llmProvider');
     if (!sel) return;
@@ -426,7 +426,7 @@ function setDictCloudProviderAvailable(available) {
             const opt = document.createElement('option');
             opt.value = 'dictcloud';
             opt.setAttribute('data-desc', 'Managed. No setup or API key');
-            opt.textContent = 'Dict Cloud';
+            opt.textContent = 'MegaBrain Cloud';
             sel.insertBefore(opt, sel.firstChild);
             sel._customSelect?.rebuild();
         }
@@ -500,10 +500,10 @@ async function updateDictCloudAccount() {
             document.getElementById('dcUsagePlan').textContent = planLabel;
             usageCard.classList.remove('hidden');
         } else {
-            accessEl.textContent = "Dict Cloud cleanup isn't enabled for your account yet. You're on the list, we'll turn it on soon.";
+            accessEl.textContent = "MegaBrain Cloud cleanup isn't enabled for your account yet. You're on the list, we'll turn it on soon.";
         }
     } catch (e) {
-        // Can't confirm the flag, so don't offer Dict Cloud as a provider.
+        // Can't confirm the flag, so don't offer MegaBrain Cloud as a provider.
         setDictCloudProviderAvailable(false);
         accessEl.textContent = "Couldn't check access right now.";
     }
@@ -914,7 +914,7 @@ async function init() {
     // All controls now reflect saved state; arm auto-save for real user edits.
     wireAutoSave();
     settingsReady = true;
-    // If Dict Cloud was selected but isn't available, the provider was switched
+    // If MegaBrain Cloud was selected but isn't available, the provider was switched
     // to the local default during load; persist that now that all fields exist.
     if (providerCorrectionPending) {
         providerCorrectionPending = false;
@@ -969,13 +969,13 @@ function updateProviderFields() {
     document.getElementById('llmEndpoint').disabled = true;
     document.getElementById('llmEndpoint').placeholder = PROVIDER_ENDPOINTS[provider] || '';
 
-    // Dict Cloud is fully managed: no key, endpoint, or model to configure.
+    // MegaBrain Cloud is fully managed: no key, endpoint, or model to configure.
     document.getElementById('apiKeyRow').style.display = isCloud ? 'flex' : 'none';
     document.getElementById('endpointRow').style.display = isDictCloud ? 'none' : 'flex';
     document.getElementById('modelRow').style.display = isDictCloud ? 'none' : 'flex';
 
-    // No model list to fetch for Dict Cloud; refreshModels persists for the
-    // others, so persist here when switching to Dict Cloud. (No-op during init.)
+    // No model list to fetch for MegaBrain Cloud; refreshModels persists for the
+    // others, so persist here when switching to MegaBrain Cloud. (No-op during init.)
     if (isDictCloud) {
         autoSave();
     } else {
@@ -1613,18 +1613,18 @@ const CHECK_ICON_SVG =
 const GLOBE_ICON_SVG =
     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18"/></svg>';
 
-// Small globe badge marking a transcription that was refined through Dict Cloud
+// Small globe badge marking a transcription that was refined through MegaBrain Cloud
 // (i.e. it left the device). Hover shows an explanation.
 function makeCloudBadge() {
     const span = document.createElement('span');
     span.className = 'history-cloud';
     span.innerHTML = GLOBE_ICON_SVG;
-    span.setAttribute('aria-label', 'Refined through Dict Cloud');
+    span.setAttribute('aria-label', 'Refined through MegaBrain Cloud');
     // Custom styled tooltip. Driven by JS pointer events (not CSS :hover) because
     // the macOS webview can leave a :hover state stuck, so the bubble never hides.
     const tip = document.createElement('span');
     tip.className = 'history-cloud-tip';
-    tip.textContent = 'Refined through Dict Cloud';
+    tip.textContent = 'Refined through MegaBrain Cloud';
     span.appendChild(tip);
     span.addEventListener('mouseenter', () => span.classList.add('tip-open'));
     span.addEventListener('mouseleave', () => span.classList.remove('tip-open'));
@@ -1676,7 +1676,7 @@ async function loadHistory() {
             const text = entry.cleaned || entry.raw || '';
 
             // Actions, pinned to the top-right on one row: the cloud badge (when
-            // refined via Dict Cloud) sits to the left of the copy button. Keeping
+            // refined via MegaBrain Cloud) sits to the left of the copy button. Keeping
             // them side by side means short, single-line entries still show both.
             const right = document.createElement('div');
             right.className = 'history-actions';

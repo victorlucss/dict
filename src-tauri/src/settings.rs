@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Write a JSON store atomically: serialize to a sibling temp file, restrict
-/// its permissions (0600 on Unix — config.json holds API keys and the Dict
+/// its permissions (0600 on Unix — config.json holds API keys and the MegaBrain
 /// Cloud token; history.json holds transcripts), then rename over the target.
 /// A crash mid-write can therefore never truncate or corrupt the store, and a
 /// replaced file always ends up owner-only regardless of its previous mode.
@@ -56,7 +56,7 @@ pub enum LLMProvider {
     Openrouter,
     Ollama,
     Lmstudio,
-    /// Managed Dict Cloud cleanup — no API key; auth via an anonymous device id.
+    /// Managed MegaBrain Cloud cleanup — no API key; auth via an anonymous device id.
     Dictcloud,
 }
 
@@ -110,10 +110,10 @@ pub struct SettingsData {
     pub audio_input_device: Option<String>,
     #[serde(default = "default_hotkey")]
     pub hotkey: String,
-    /// Dict Cloud session token (set after email one-time-code sign-in). Empty = signed out.
+    /// MegaBrain Cloud session token (set after email one-time-code sign-in). Empty = signed out.
     #[serde(default)]
     pub dict_cloud_token: String,
-    /// Email of the signed-in Dict Cloud account (for display in Preferences).
+    /// Email of the signed-in MegaBrain Cloud account (for display in Preferences).
     #[serde(default)]
     pub dict_cloud_email: String,
 }
@@ -238,7 +238,7 @@ pub struct HistoryEntry {
     pub cleaned: String,
     pub app: String,
     pub engine: String,
-    /// True when this transcription was refined through Dict Cloud (left the device).
+    /// True when this transcription was refined through MegaBrain Cloud (left the device).
     #[serde(default)]
     pub cloud: bool,
 }
@@ -260,7 +260,7 @@ impl AppSettings {
                     Ok(d) => d,
                     Err(e) => {
                         // Don't silently destroy the user's config — it holds API
-                        // keys and the Dict Cloud token, and the save() below
+                        // keys and the MegaBrain Cloud token, and the save() below
                         // would overwrite it with defaults. Keep the unparseable
                         // file aside for manual recovery.
                         let backup = config_file.with_extension("json.corrupt");

@@ -59,7 +59,7 @@ async fn check(app: AppHandle, user_initiated: bool) {
             let install = app
                 .dialog()
                 .message(format!(
-                    "Dict {version} is available (you have {current}).\n\nInstall it now? Dict will restart to finish."
+                    "MegaBrain {version} is available (you have {current}).\n\nInstall it now? MegaBrain will restart to finish."
                 ))
                 .title("Update available")
                 .buttons(MessageDialogButtons::OkCancelCustom(
@@ -93,7 +93,7 @@ async fn check(app: AppHandle, user_initiated: bool) {
                 notify(
                     &app,
                     "You're up to date",
-                    "You're running the latest version of Dict.",
+                    "You're running the latest version of MegaBrain.",
                     MessageDialogKind::Info,
                 );
             }

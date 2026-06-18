@@ -85,7 +85,7 @@ fn save_settings(
     }
 
     let mut s = state.settings.lock().map_err(|e| e.to_string())?;
-    // The Preferences form never sends the Dict Cloud session token/email, so
+    // The Preferences form never sends the MegaBrain Cloud session token/email, so
     // preserve them across auto-saves (only the auth commands change them).
     let mut data = data;
     if data.dict_cloud_token.is_empty() {
@@ -286,7 +286,7 @@ fn open_onboarding(app: &AppHandle) {
         "onboarding",
         WebviewUrl::App("onboarding/index.html".into()),
     )
-    .title("Dict Setup")
+    .title("MegaBrain Setup")
     .inner_size(560.0, 660.0)
     .resizable(false)
     .center()
@@ -351,7 +351,7 @@ fn show_overlay(app: &AppHandle) {
         "overlay",
         WebviewUrl::App("overlay/index.html".into()),
     )
-    .title("Dict")
+    .title("MegaBrain")
     .inner_size(width, height)
     .transparent(true)
     .decorations(false)
@@ -432,7 +432,7 @@ fn show_accessibility_alert(_app: &AppHandle) {
         .spawn();
 }
 
-/// Dict Cloud auth: POST {email, password} to `path`, store the returned token
+/// MegaBrain Cloud auth: POST {email, password} to `path`, store the returned token
 /// + email on success. Shared by sign-up and sign-in.
 async fn dict_cloud_auth(
     app: &tauri::AppHandle,
@@ -449,7 +449,7 @@ async fn dict_cloud_auth(
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
-        .map_err(|e| format!("Couldn't reach Dict Cloud: {}", e))?;
+        .map_err(|e| format!("Couldn't reach MegaBrain Cloud: {}", e))?;
 
     let status = resp.status();
     let data: serde_json::Value = resp
@@ -483,7 +483,7 @@ async fn dict_cloud_auth(
     Ok(email)
 }
 
-/// Dict Cloud: create an account with email + password (does not sign in).
+/// MegaBrain Cloud: create an account with email + password (does not sign in).
 #[tauri::command]
 async fn dict_cloud_sign_up(
     app: tauri::AppHandle,
@@ -501,7 +501,7 @@ async fn dict_cloud_sign_up(
     .await
 }
 
-/// Dict Cloud: sign in with email + password (persists the session token).
+/// MegaBrain Cloud: sign in with email + password (persists the session token).
 #[tauri::command]
 async fn dict_cloud_sign_in(
     app: tauri::AppHandle,
@@ -519,7 +519,7 @@ async fn dict_cloud_sign_in(
     .await
 }
 
-/// Dict Cloud: fetch the signed-in account's status — feature flags, plan,
+/// MegaBrain Cloud: fetch the signed-in account's status — feature flags, plan,
 /// daily limit, and usage today. Returns the raw `/v1/flags` JSON.
 #[tauri::command]
 async fn dict_cloud_flags(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
@@ -538,7 +538,7 @@ async fn dict_cloud_flags(app: tauri::AppHandle) -> Result<serde_json::Value, St
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
-        .map_err(|e| format!("Couldn't reach Dict Cloud: {}", e))?;
+        .map_err(|e| format!("Couldn't reach MegaBrain Cloud: {}", e))?;
     if !resp.status().is_success() {
         return Err("Couldn't load account status.".to_string());
     }
@@ -549,7 +549,7 @@ async fn dict_cloud_flags(app: tauri::AppHandle) -> Result<serde_json::Value, St
     Ok(data)
 }
 
-/// Dict Cloud: sign out (clear the stored token + email).
+/// MegaBrain Cloud: sign out (clear the stored token + email).
 #[tauri::command]
 fn dict_cloud_sign_out(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
@@ -604,7 +604,7 @@ fn build_fallback_window(app: &AppHandle) {
         "fallback",
         WebviewUrl::App("fallback/index.html".into()),
     )
-    .title("Dict")
+    .title("MegaBrain")
     .inner_size(width, height)
     .transparent(true)
     .decorations(false)
@@ -664,7 +664,7 @@ fn build_tray_menu(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let version_item = MenuItemBuilder::with_id(
         "version",
-        format!("Dict v{}", env!("CARGO_PKG_VERSION")),
+        format!("MegaBrain v{}", env!("CARGO_PKG_VERSION")),
     )
     .enabled(false)
     .build(app)?;
@@ -722,9 +722,9 @@ fn set_tray_recording_indicator(app: &AppHandle, recording: bool) {
     if let Some(tray) = app.tray_by_id("main-tray") {
         let _ = tray.set_title(Some(if recording { "🔴" } else { "" }));
         let _ = tray.set_tooltip(Some(if recording {
-            "Dict — recording"
+            "MegaBrain — recording"
         } else {
-            "Dict"
+            "MegaBrain"
         }));
     }
 }
@@ -1087,7 +1087,7 @@ fn handle_transcription(app: &AppHandle, text: &str) {
         if settings_data.privacy_mode {
             tracing::info!("Privacy mode on: not saving transcription to history");
         } else {
-            // The text left the device for refinement when LLM cleanup ran via Dict Cloud.
+            // The text left the device for refinement when LLM cleanup ran via MegaBrain Cloud.
             let cloud = settings_data.llm_enabled
                 && matches!(settings_data.llm_provider, settings::LLMProvider::Dictcloud);
             let state = app_handle.state::<AppState>();
@@ -1348,7 +1348,7 @@ pub fn run() {
 
     let app_settings = AppSettings::load();
     let show_onboarding = !app_settings.data.onboarding_done;
-    tracing::info!("Dict starting up");
+    tracing::info!("MegaBrain starting up");
     tracing::info!("Engine: Whisper");
     tracing::info!(
         "LLM cleanup: {}",
@@ -1514,13 +1514,13 @@ pub fn run() {
             }
 
             tracing::info!(
-                "Dict is running. Press {} to dictate.",
+                "MegaBrain is running. Press {} to dictate.",
                 app.state::<AppState>().settings.lock().unwrap().data.hotkey
             );
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error building Dict")
+        .expect("error building MegaBrain")
         .run(|_app, event| {
             // Prevent app from exiting when all windows close (tray-only app)
             if let tauri::RunEvent::ExitRequested { api, .. } = event {

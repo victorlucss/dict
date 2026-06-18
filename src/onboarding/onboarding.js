@@ -46,14 +46,14 @@ const STEP = {
     welcome: {
         id: 'welcome',
         icon: ICONS.mic,
-        title: 'Welcome to Dict',
-        description: 'Talk, and Dict types it out in any app. Hold <kbd>Option</kbd> + <kbd>Space</kbd>, speak, and clean text lands wherever your cursor is. This takes about a minute.',
+        title: 'Welcome to MegaBrain',
+        description: 'Talk, and MegaBrain types it out in any app. Hold <kbd>Option</kbd> + <kbd>Space</kbd>, speak, and clean text lands wherever your cursor is. This takes about a minute.',
         action: 'Get Started'
     },
     resonate: {
         id: 'resonate',
         icon: ICONS.sparkles,
-        title: 'What brings you to Dict?',
+        title: 'What brings you to MegaBrain?',
         description: 'Pick whatever sounds like you. It just helps us say hello, nothing here is locked in.',
         action: 'Continue'
     },
@@ -68,14 +68,14 @@ const STEP = {
         id: 'accessibility',
         icon: ICONS.shield,
         title: 'One quick permission',
-        description: 'To type into other apps, Dict needs Accessibility access. Flip Dict on in System Settings, then pop back here.',
+        description: 'To type into other apps, MegaBrain needs Accessibility access. Flip MegaBrain on in System Settings, then pop back here.',
         action: 'Continue'
     },
     model: {
         id: 'model',
         icon: ICONS.download,
         title: 'Pick a voice model',
-        description: 'Dict transcribes right on your Mac with Whisper. Pick a model to download. You can switch anytime in Preferences.',
+        description: 'MegaBrain transcribes right on your Mac with Whisper. Pick a model to download. You can switch anytime in Preferences.',
         action: 'Continue'
     },
     tryit: {
@@ -149,7 +149,7 @@ async function init() {
     } else {
         steps = [STEP.welcome, STEP.resonate, STEP.model, STEP.personalize, STEP.tryit];
         // Swap shortcut copy for non-macOS.
-        STEP.welcome.description = `Talk, and Dict types it out in any app. Hold ${OTHER_SHORTCUT}, speak, and clean text lands wherever your cursor is. This takes about a minute.`;
+        STEP.welcome.description = `Talk, and MegaBrain types it out in any app. Hold ${OTHER_SHORTCUT}, speak, and clean text lands wherever your cursor is. This takes about a minute.`;
         STEP.tryit.description = `Hold ${OTHER_SHORTCUT}, say a sentence, then let go. Your words show up below.`;
     }
 
