@@ -17,3 +17,8 @@ src-tauri/icons/android/
 src-tauri/icons/ios/
 
 .playwright-mcp/
+
+# Stale pre-Tauri build artifacts (never commit)
+Dict.app/
+Dict.dmg
+.build/
