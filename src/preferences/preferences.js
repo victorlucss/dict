@@ -939,6 +939,14 @@ function loadValues(s) {
     // model manager; refreshParakeetModels() preselects by matching this path.
     document.getElementById('sttEngine').value = s.sttEngine || 'whisper';
     document.getElementById('parakeetModelPath').value = s.parakeetModelPath || '';
+    // Parakeet (sherpa-onnx) is macOS-only. Off macOS, drop the option, force the
+    // engine to Whisper, and hide the now-single-choice engine selector.
+    if (platform !== 'macos') {
+        const eng = document.getElementById('sttEngine');
+        eng?.querySelector('option[value="parakeet"]')?.remove();
+        if (eng && eng.value === 'parakeet') eng.value = 'whisper';
+        document.getElementById('sttEngineRow')?.classList.add('hidden');
+    }
     applyEngineVisibility();
 
     document.getElementById('llmEnabled').checked = s.llmEnabled;

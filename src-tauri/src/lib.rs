@@ -4,6 +4,9 @@ mod hotkey;
 mod llm;
 mod logging;
 mod models;
+// Parakeet (sherpa-onnx) is macOS-only for now — see Cargo.toml. Other platforms
+// ship Whisper-only.
+#[cfg(target_os = "macos")]
 mod parakeet;
 mod settings;
 mod text_injector;
@@ -909,6 +912,10 @@ fn stop_recording(app: &AppHandle) {
                     )
                 };
 
+                // Parakeet is macOS-only; off macOS its path is unused.
+                #[cfg(not(target_os = "macos"))]
+                let _ = &parakeet_path;
+
                 // Dispatch to the selected STT engine. Both take the same 16kHz
                 // mono f32 samples; Parakeet (multilingual, auto-detect) needs no
                 // language flag.
@@ -916,8 +923,15 @@ fn stop_recording(app: &AppHandle) {
                     settings::SttEngine::Whisper => {
                         whisper::transcribe(&whisper_path, &samples, &language)
                     }
+                    #[cfg(target_os = "macos")]
                     settings::SttEngine::Parakeet => {
                         parakeet::transcribe(&parakeet_path, &samples)
+                    }
+                    // Parakeet isn't built on this platform — fall back to Whisper
+                    // defensively (the Preferences UI hides the option off macOS).
+                    #[cfg(not(target_os = "macos"))]
+                    settings::SttEngine::Parakeet => {
+                        whisper::transcribe(&whisper_path, &samples, &language)
                     }
                 };
 

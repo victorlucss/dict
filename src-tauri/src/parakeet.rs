@@ -74,12 +74,6 @@ fn resolve_files(dir: &Path) -> Result<TransducerFiles, String> {
     })
 }
 
-/// True if `dir` looks like a complete transducer model bundle. Used by the
-/// model catalog to report download status.
-pub fn is_complete_model_dir(dir: &Path) -> bool {
-    dir.is_dir() && resolve_files(dir).is_ok()
-}
-
 /// Transcribe 16 kHz mono f32 samples with the Parakeet model at `model_dir`.
 /// Loads + warms the recognizer on first use (or when the model changes).
 pub fn transcribe(model_dir: &str, samples: &[f32]) -> Result<String, String> {

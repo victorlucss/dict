@@ -1,6 +1,6 @@
 use futures_util::StreamExt;
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tauri::Emitter;
 
@@ -434,6 +434,27 @@ fn parakeet_dir(archive: &str) -> PathBuf {
     models_directory().join(archive)
 }
 
+/// Whether an extracted Parakeet bundle looks complete: a transducer needs
+/// tokens.txt plus encoder/decoder/joiner .onnx files. This is a plain file
+/// check (no sherpa dependency) so the model catalog/download compiles on every
+/// platform even though Parakeet inference itself is macOS-only.
+fn parakeet_dir_complete(dir: &Path) -> bool {
+    if !dir.is_dir() || !dir.join("tokens.txt").is_file() {
+        return false;
+    }
+    let onnx: Vec<String> = match std::fs::read_dir(dir) {
+        Ok(rd) => rd
+            .flatten()
+            .filter_map(|e| e.file_name().to_str().map(|s| s.to_lowercase()))
+            .filter(|n| n.ends_with(".onnx"))
+            .collect(),
+        Err(_) => return false,
+    };
+    ["encoder", "decoder", "joiner"]
+        .iter()
+        .all(|role| onnx.iter().any(|n| n.contains(role)))
+}
+
 /// List the curated Parakeet catalog with download status. A model counts as
 /// downloaded only when its extracted directory holds a complete transducer bundle.
 #[tauri::command]
@@ -447,7 +468,7 @@ pub fn list_parakeet_models() -> Vec<ParakeetModelInfo> {
                 label: e.label.to_string(),
                 size: e.size.to_string(),
                 languages: e.languages.to_string(),
-                downloaded: crate::parakeet::is_complete_model_dir(&dir),
+                downloaded: parakeet_dir_complete(&dir),
                 path: dir.to_string_lossy().to_string(),
             }
         })
@@ -491,7 +512,7 @@ pub async fn download_parakeet_model(
     let _ = std::fs::remove_file(&part_path);
     extract?;
 
-    if !crate::parakeet::is_complete_model_dir(&model_dir) {
+    if !parakeet_dir_complete(&model_dir) {
         let _ = std::fs::remove_dir_all(&model_dir);
         return Err("Downloaded model is incomplete after extraction".to_string());
     }
@@ -508,7 +529,9 @@ pub fn delete_parakeet_model(id: String) -> Result<(), String> {
         .ok_or_else(|| format!("Unknown Parakeet model: {}", id))?;
     let dir = parakeet_dir(entry.archive);
     // Drop the warm recognizer in case this was the active model, so the next
-    // transcription reloads instead of using a freed model.
+    // transcription reloads instead of using a freed model. (macOS-only; Parakeet
+    // inference isn't built elsewhere.)
+    #[cfg(target_os = "macos")]
     crate::parakeet::reset_warm_model();
     match std::fs::remove_dir_all(&dir) {
         Ok(()) => Ok(()),

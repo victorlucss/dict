@@ -36,12 +36,10 @@ rubato = "0.16"
 # transcribe f32 samples directly (no subprocess, no disk WAV). Metal GPU added on
 # macOS below.
 whisper-rs = "0.16"
-# Second STT engine: sherpa-onnx (ONNX Runtime) for NVIDIA Parakeet and other
-# non-Whisper models. `download-binaries` fetches prebuilt sherpa-onnx + ONNX
-# Runtime per-platform (no C++ source compile); `tts` is dropped (unused).
-sherpa-rs = { version = "0.6.8", default-features = false, features = ["download-binaries"] }
 # Parakeet models ship as .tar.bz2 bundles (encoder/decoder/joiner .onnx + tokens);
-# decompress + untar in-process when downloading them.
+# decompress + untar in-process when downloading them. Cross-platform (the model
+# download UI is harmless to compile everywhere; Parakeet inference itself is
+# macOS-only — see sherpa-rs under the macOS target deps below).
 tar = "0.4"
 bzip2 = "0.5"
 arboard = { version = "3", default-features = false }
@@ -58,6 +56,11 @@ core-foundation = "0.10"
 core-foundation-sys = "0.8"
 # Metal GPU acceleration for whisper.cpp on Apple Silicon (CPU elsewhere).
 whisper-rs = { version = "0.16", features = ["metal"] }
+# Second STT engine (Parakeet / NeMo transducer) via sherpa-onnx. macOS-only for
+# now: `download-binaries` ships sherpa-onnx + ONNX Runtime as dynamic libs that
+# must be bundled per-platform, and only the macOS bundling is wired up + tested.
+# Linux/Windows therefore ship Whisper-only (no sherpa libs to bundle/break).
+sherpa-rs = { version = "0.6.8", default-features = false, features = ["download-binaries"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
