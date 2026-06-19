@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is MegaBrain?
 
-MegaBrain is a cross-platform (macOS, Linux, Windows) menu-bar/tray app that converts voice to text via a global hotkey. It has two selectable STT engines — Whisper (embedded whisper.cpp via whisper-rs, default) and Parakeet (NVIDIA NeMo transducer models via sherpa-onnx/sherpa-rs) — both kept warm in RAM, with optional LLM post-processing, and pastes the result into whatever app has focus.
+MegaBrain is a cross-platform (macOS, Linux, Windows) menu-bar/tray app that converts voice to text via a global hotkey. STT engines: Whisper (embedded whisper.cpp via whisper-rs, default, all platforms) and — on macOS only — Parakeet (NVIDIA NeMo transducer models via sherpa-onnx/sherpa-rs); both kept warm in RAM, with optional LLM post-processing, and pastes the result into whatever app has focus. Linux/Windows ship Whisper-only (sherpa-rs is a macOS-only dependency; its dylibs are only bundled there).
 
 Built with **Rust + Tauri 2.0** for the backend and vanilla HTML/CSS/JS for the frontend.
 
@@ -105,7 +105,7 @@ Vanilla HTML/CSS/JS with no build step:
 ### Key Design Decisions
 
 - Tauri 2.0 for cross-platform (macOS, Linux, Windows) with a single Rust codebase — no platform-specific STT, so the build has no Swift/native bridge to compile
-- Two selectable STT engines (`stt_engine` setting): Whisper (embedded whisper.cpp via whisper-rs, default, GGML model warm in RAM, Metal-accelerated) and Parakeet (NeMo transducer via sherpa-onnx/sherpa-rs, warm recognizer). sherpa-rs uses `download-binaries` (prebuilt sherpa-onnx + ONNX Runtime, no C++ source compile); its dylibs are found at runtime via rpath set in `build.rs` (`@executable_path`/`$ORIGIN`) and bundled into the app. Parakeet models are `.tar.bz2` bundles downloaded + extracted by `models.rs` into `~/.config/dict/models/<name>/`
+- STT engines via the `stt_engine` setting: Whisper (embedded whisper.cpp via whisper-rs, default, GGML model warm in RAM, Metal-accelerated, all platforms) and — macOS only — Parakeet (NeMo transducer via sherpa-onnx/sherpa-rs, warm recognizer). sherpa-rs is a macOS-only dependency using `download-binaries` (prebuilt sherpa-onnx + ONNX Runtime, no C++ source compile); `build.rs` stages its dylibs from the sherpa-rs download cache into `native-libs/` (target-independent — works for the universal build) and they're bundled into `Contents/Frameworks`, found at runtime via the `@executable_path/../Frameworks` rpath. Parakeet models are `.tar.bz2` bundles downloaded + extracted by `models.rs` into `~/.config/dict/models/<name>/`. Linux/Windows compile Whisper-only and the Preferences UI hides the engine selector there
 - Recording runs while the hotkey is held (push-to-talk) or until toggled off, with a 10-minute safety cap (`audio::MAX_RECORDING_SECS`): the capture callback stops buffering at the cap and a per-recording watchdog thread auto-stops the session. On macOS the watchdog also stops bare-modifier PTT recordings whose Release event was lost (secure-input fields, screen lock, left/right modifier aliasing) by polling `CGEventSourceKeyState`. The tray shows 🔴 while recording
 - `privacy_mode` skips cloud LLM providers (MegaBrain Cloud / OpenAI / Anthropic / OpenRouter) and suppresses history persistence; local providers (Ollama, LM Studio) still run
 - MegaBrain Cloud is managed cleanup via a Convex backend, gated per-user by a `cloud_cleanup` feature flag; the client only shows it as a provider when signed in and the flag is on
